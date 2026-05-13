@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bunkering Data Processing — 船加油数据处理需求规格</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --card-bg: #ffffff;
+    --primary: #2563eb;
+    --primary-light: #dbeafe;
+    --accent: #0891b2;
+    --warn: #d97706;
+    --warn-light: #fef3c7;
+    --success: #059669;
+    --success-light: #d1fae5;
+    --text: #1e293b;
+    --text2: #475569;
+    --text3: #64748b;
+    --border: #e2e8f0;
+    --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-lg: 0 10px 25px rgba(0,0,0,.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.7;
+  }
+
+  /* ── Hero ──────────────────────── */
+  .hero {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 50%, #0891b2 100%);
+    padding: 64px 0 56px; text-align: center; position: relative; overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+  .hero .tag {
+    display: inline-block; padding: 4px 16px; border: 1px solid rgba(255,255,255,.3);
+    border-radius: 20px; font-size: 12px; color: rgba(255,255,255,.85); letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: 16px; backdrop-filter: blur(4px);
+  }
+  .hero h1 { font-size: 38px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+  .hero .sub { font-size: 15px; color: rgba(255,255,255,.75); max-width: 560px; margin: 0 auto; }
+  .hero .meta { margin-top: 20px; font-size: 13px; color: rgba(255,255,255,.55); }
+  .hero .meta span { margin: 0 14px; }
+
+  /* ── Container ─────────────────── */
+  .container { max-width: 960px; margin: 0 auto; padding: 0 28px; }
+  section { padding: 52px 0; }
+  section + section { border-top: 1px solid var(--border); }
+
+  /* ── Section headings ──────────── */
+  .s-num {
+    display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 2px;
+    color: var(--primary); text-transform: uppercase; margin-bottom: 6px;
+    padding: 2px 10px; border: 1px solid var(--primary-light);
+    border-radius: 4px; background: var(--primary-light);
+  }
+  h2 { font-size: 26px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  h3 { font-size: 18px; font-weight: 600; color: var(--text); margin: 28px 0 10px; }
+  h4 { font-size: 15px; font-weight: 600; color: var(--text2); margin: 16px 0 6px; }
+  p, li { color: var(--text2); margin-bottom: 8px; }
+
+  /* ── Cards ─────────────────────── */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 20px 0; }
+  .card {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; transition: transform .2s, box-shadow .2s; position: relative; overflow: hidden;
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+  .card .card-icon { font-size: 26px; margin-bottom: 10px; }
+  .card h4 { margin: 0 0 6px; color: var(--text); }
+  .card p { font-size: 13px; margin: 0; }
+  .card::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    opacity: 0; transition: opacity .2s;
+  }
+  .card:hover::after { opacity: 1; }
+
+  /* ── Stat bar ──────────────────── */
+  .stat-row { display: flex; gap: 14px; flex-wrap: wrap; margin: 20px 0; }
+  .stat {
+    flex: 1; min-width: 130px; background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; text-align: center; transition: box-shadow .2s;
+  }
+  .stat:hover { box-shadow: var(--shadow-lg); }
+  .stat .num { font-size: 30px; font-weight: 800; color: var(--primary); }
+  .stat .label { font-size: 11px; color: var(--text3); margin-top: 2px; letter-spacing: .5px; text-transform: uppercase; }
+
+  /* ── Pipeline flow ─────────────── */
+  .pipeline {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; margin: 28px 0;
+  }
+  .pipe-step {
+    background: var(--card-bg); border: 2px solid var(--border); border-radius: var(--radius);
+    padding: 14px 20px; text-align: center; min-width: 90px; transition: all .3s;
+  }
+  .pipe-step:hover { border-color: var(--primary); box-shadow: 0 0 18px rgba(37,99,235,.1); }
+  .pipe-step .step-num { font-size: 10px; color: var(--primary); font-weight: 600; letter-spacing: 1px; }
+  .pipe-step .step-title { font-size: 13px; font-weight: 600; color: var(--text); margin: 2px 0; }
+  .pipe-step .step-detail { font-size: 10px; color: var(--text3); }
+  .pipe-arrow { color: var(--primary); font-size: 18px; flex-shrink: 0; }
+  @media (max-width: 768px) {
+    .pipe-arrow { transform: rotate(90deg); }
+    .pipeline { flex-direction: column; }
+  }
+
+  /* ── Tables ────────────────────── */
+  .tbl-wrap { overflow-x: auto; margin: 16px 0; border-radius: var(--radius); border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #f1f5f9; color: var(--primary); font-weight: 600; text-align: left; padding: 10px 14px; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; }
+  td { padding: 9px 14px; border-top: 1px solid var(--border); color: var(--text2); }
+  tr:hover td { background: #f8fafc; }
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  }
+  .badge-pdf { background: var(--primary-light); color: var(--primary); }
+  .badge-new { background: var(--warn-light); color: var(--warn); }
+  .badge-fix { background: #fce4ec; color: #c62828; }
+  .badge-match { background: var(--success-light); color: var(--success); }
+
+  /* ── Animated timeline ─────────── */
+  .timeline { margin: 20px 0; position: relative; padding-left: 28px; }
+  .timeline::before {
+    content: ''; position: absolute; left: 8px; top: 4px; bottom: 4px;
+    width: 2px; background: linear-gradient(to bottom, var(--primary), var(--accent)); border-radius: 1px;
+  }
+  .tl-item { position: relative; margin-bottom: 20px; padding-left: 14px; }
+  .tl-item::before {
+    content: ''; position: absolute; left: -22px; top: 5px; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--card-bg); border: 2px solid var(--primary);
+    box-shadow: 0 0 6px rgba(37,99,235,.25); transition: all .3s;
+  }
+  .tl-item:hover::before { background: var(--primary); box-shadow: 0 0 14px rgba(37,99,235,.45); }
+  .tl-item .tl-label { font-size: 10px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; }
+  .tl-item .tl-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .tl-item .tl-desc { font-size: 12px; color: var(--text2); }
+
+  /* ── Formula box ───────────────── */
+  .formula-box {
+    background: #f0f9ff; border: 1px solid #bae6fd; border-left: 4px solid var(--primary);
+    border-radius: var(--radius); padding: 16px 20px; margin: 14px 0; font-size: 13px;
+  }
+  .formula-box code { color: var(--primary); font-weight: 600; }
+
+  /* ── Collapsible ───────────────── */
+  details { margin: 12px 0; }
+  details summary {
+    cursor: pointer; padding: 10px 14px; background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: var(--radius); font-weight: 600; color: var(--primary); user-select: none;
+    transition: background .2s; font-size: 14px;
+  }
+  details summary:hover { background: #f8fafc; }
+  details .detail-content { padding: 14px 0 0 14px; }
+
+  /* ── Flow diagram (CSS) ───────── */
+  .flow-grid {
+    display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 8px;
+    align-items: start; margin: 20px 0;
+  }
+  .flow-node {
+    background: var(--card-bg); border: 2px solid var(--border); border-radius: var(--radius);
+    padding: 16px; text-align: center; transition: all .3s;
+  }
+  .flow-node:hover { border-color: var(--primary); }
+  .flow-node .fn-icon { font-size: 24px; margin-bottom: 4px; }
+  .flow-node .fn-title { font-weight: 600; font-size: 14px; }
+  .flow-node .fn-sub { font-size: 11px; color: var(--text3); }
+  .flow-arrow { display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--primary); }
+  @media (max-width: 768px) {
+    .flow-grid { grid-template-columns: 1fr; }
+    .flow-arrow { transform: rotate(90deg); padding: 4px 0; }
+  }
+
+  /* ── Requirement tag indicator ─── */
+  .req-tags { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
+
+  /* ── Footer ────────────────────── */
+  footer { text-align: center; padding: 36px 0; color: var(--text3); font-size: 12px; background: #fff; border-top: 1px solid var(--border); }
+
+  /* ── Scrollbar ─────────────────── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Keyframes ─────────────────── */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  .animate-in { animation: fadeUp .6s ease both; }
+  .delay-1 { animation-delay: .1s; }
+  .delay-2 { animation-delay: .2s; }
+  .delay-3 { animation-delay: .3s; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- HERO -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="tag">Data Processing Specification</div>
+  <h1>船加油数据处理 · 需求规格</h1>
+  <p class="sub">整合原始 PDF 需求 + 两轮补充需求，形成完整数据处理规格说明</p>
+  <p class="meta">
+    <span>数据源：Bunkering Record v3.xlsx</span>
+    <span>锚地开放.dta</span>
+    <span>气象预报.dta</span>
+  </p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- OVERVIEW -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="container">
+<section class="animate-in">
+  <span class="s-num">Overview</span>
+  <h2>项目概览</h2>
+
+  <div class="stat-row">
+    <div class="stat">
+      <div class="num">3</div>
+      <div class="label">数据源</div>
+    </div>
+    <div class="stat">
+      <div class="num">2</div>
+      <div class="label">处理阶段</div>
+    </div>
+    <div class="stat">
+      <div class="num">~4400</div>
+      <div class="label">原始行数</div>
+    </div>
+    <div class="stat">
+      <div class="num">~1560</div>
+      <div class="label">最终交易数</div>
+    </div>
+    <div class="stat">
+      <div class="num">~879</div>
+      <div class="label">唯一船舶</div>
+    </div>
+  </div>
+
+  <p>本数据处理流程将从原始船加油记录出发，经过<strong>时间标准化预处理</strong>和<strong>交易级别聚合</strong>两个阶段，并匹配港口开放数据和气象预报数据，最终生成完整的交易级别分析数据集。</p>
+
+  <div class="pipeline">
+    <div class="pipe-step">
+      <div class="step-num">INPUT</div>
+      <div class="step-title">Bunkering Record v3</div>
+      <div class="step-detail">原始加油记录 (~4400行)</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="step-num">STAGE 1</div>
+      <div class="step-title">预处理</div>
+      <div class="step-detail">时间标准化 + 字段解析</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="step-num">STAGE 2</div>
+      <div class="step-title">交易聚合</div>
+      <div class="step-detail">分组 + 多STS展开</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="step-num">STAGE 3</div>
+      <div class="step-title">外部匹配</div>
+      <div class="step-detail">锚地开放 + 气象预报</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="step-num">OUTPUT</div>
+      <div class="step-title">最终数据集</div>
+      <div class="step-detail">每行一笔交易</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- DATA SOURCE -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="animate-in delay-1">
+  <span class="s-num">Data Sources</span>
+  <h2>数据源说明</h2>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">🚢</div>
+      <h4>Bunkering Record v3.xlsx</h4>
+      <p>船加油原始记录（修正版 v3）。每次 vessel 信息出现代表一笔新交易；每笔交易含多条 Anchorage（排队等待）和/或 STS-Bunkering（加油）记录。</p>
+      <p style="margin-top:8px;font-size:12px;color:var(--text3);">10 列 · ~4400 行</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">⚓</div>
+      <h4>锚地开放.dta</h4>
+      <p>港口锚地开放状态数据。记录 date-hour-port 维度的 status（open/close），用于计算交易开始前后特定时间窗口的港口开放时长。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🌤</div>
+      <h4>气象预报.dta</h4>
+      <p>港口气象预报指数数据。记录 date-hour-port 维度的 气象指数（1/2/3/4，从坏到好），用于计算交易开始前后港口预报开放时长。</p>
+      <p style="margin-top:8px;font-size:12px;color:var(--text3);">4 列 · 71,976 行</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- STAGE 1: PREPROCESSING -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="animate-in delay-1">
+  <span class="s-num">Stage 1</span>
+  <h2>第一步：预处理（时间标准化 + 字段解析）</h2>
+
+  <div class="req-tags">
+    <span class="badge badge-pdf">PDF 原始要求</span>
+    <span class="badge badge-new">补充要求</span>
+  </div>
+
+  <h3>1.1 Transaction ID 分配</h3>
+  <p>原始数据无 transaction ID 列。以 vessel 列出现非空值作为新 transaction 的边界标记，为每一行分配递增的整数 transaction_id。</p>
+
+  <h3>1.2 Vessel 信息提取</h3>
+  <p>对 vessel 列进行向前填充（forward fill）。从 vessel 文本字符串中正则提取以下字段：</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>字段</th><th>说明</th><th>示例</th></tr>
+    <tr><td>vessel_name</td><td>船名</td><td>JOLLY ARGENTO</td></tr>
+    <tr><td>vessel_code</td><td>船舶代码（IMO 号）</td><td>9467043</td></tr>
+    <tr><td>vessel_type</td><td>船舶类型</td><td>Container Ship (Fully Cellular)</td></tr>
+    <tr><td>vessel_status</td><td>服役状态</td><td>In Service/Commission</td></tr>
+    <tr><td>dwt</td><td>载重吨位</td><td>62510</td></tr>
+    <tr><td>gt</td><td>总吨位</td><td>47789</td></tr>
+  </table>
+  </div>
+
+  <h3>1.3 时间标准化</h3>
+  <div class="formula-box">
+    <p>原始数据存在 <strong>两种</strong> 时间格式，需要统一解析为 datetime：</p>
+    <p>格式 A：<code>2023-01-30 04:15:00</code>（datetime 对象）</p>
+    <p>格式 B：<code>02 Feb 2023 08:11</code>（文本字符串）</p>
+  </div>
+  <p>解析结果统一存储为 <code>YYYY-MM-DD HH:MM:SS</code>，同时生成格式化日期字符串（DD Mon YYYY）和小时数（四舍五入）。</p>
+
+  <h3>1.4 小时四舍五入修正 <span class="badge badge-fix">v3 修正</span></h3>
+  <div class="formula-box">
+    <p><strong>问题：</strong>如 2024/1/5 23:42 → 被近似为 2024/1/5 0:00（同日 0 点），实际应为 2024/1/6 0:00（次日 0 点）。</p>
+    <p><strong>修正：</strong>分钟 ≥ 30 时小时 +1，若小时变为 24 则翻日为次日 0 点，并同步更新日期。</p>
+  </div>
+
+  <h3>1.5 Duration 解析</h3>
+  <p>解析 duration 文本为数字小时（四舍五入）。支持 "X day(s) Y h Z min" 等多种格式；特殊值 "-" 表示 0 小时。</p>
+
+  <h3>1.6 Draught 解析</h3>
+  <p>从 draught 文本中提取数值（如 "0 m" → 0.0, "-0.5 m" → -0.5）。</p>
+
+  <h3>1.7 Port 匹配 <span class="badge badge-pdf">PDF</span> <span class="badge badge-new">补充</span></h3>
+  <p>从 Anchorage 行的 Location Details 匹配对照表，支持 Excel 截断模糊匹配：</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>关键字</th><th>匹配端口</th><th>关键字</th><th>匹配端口</th></tr>
+    <tr><td>Tide and Berth</td><td>秀山东</td><td>Qushan / Qushan Bunkering</td><td>衢山</td></tr>
+    <tr><td>Xiazhimen South</td><td>条帚门</td><td>Mashi / Mazhi</td><td>马峙</td></tr>
+    <tr><td>Xiazhimen North</td><td>虾峙门</td><td>—</td><td>—</td></tr>
+  </table>
+  </div>
+  <p><strong>多港口规则：</strong>同一交易有多个港口时，优先使用匹配对照表的港口；无法匹配的 port 留空并记录到 <code>unmatched_port</code>。</p>
+
+  <h3>1.8 Supplier 提取</h3>
+  <p>从 STS 行的 Location Details 提取 supplier 名称（去掉 "With " 前缀）。清洗 <code>\xa0</code> 不间断空格。</p>
+
+  <h3>1.9 预处理输出</h3>
+  <p>输出 <code>bunkering_preprocessed.xlsx</code>，28 列，保留所有行级字段（解析后的 datetime、标准化时间、port_matched、supplier 等），供后续处理使用。</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- STAGE 2: FINALIZATION -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="animate-in delay-2">
+  <span class="s-num">Stage 2</span>
+  <h2>第二步：交易级别聚合</h2>
+
+  <div class="req-tags">
+    <span class="badge badge-pdf">PDF 原始要求</span>
+    <span class="badge badge-new">补充要求</span>
+    <span class="badge badge-fix">v3 新增</span>
+  </div>
+
+  <h3>2.1 整体时间线</h3>
+  <p>按 transaction_id 分组，取所有行的最早 start 和最晚 end：</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>输出列</th><th>说明</th><th>示例</th></tr>
+    <tr><td>startdate</td><td>DD Mon YYYY 格式</td><td>25 Jan 2023</td></tr>
+    <tr><td>starthour</td><td>开始小时（四舍五入）</td><td>17</td></tr>
+    <tr><td>enddate</td><td>DD Mon YYYY 格式</td><td>30 Jan 2023</td></tr>
+    <tr><td>endhour</td><td>结束小时（四舍五入）</td><td>14</td></tr>
+    <tr><td>duration</td><td>总时长（小时，四舍五入）</td><td>117</td></tr>
+  </table>
+  </div>
+
+  <h3>2.2 多 STS 展开 <span class="badge badge-new">补充</span></h3>
+  <p>每笔 STS 单独记录日期、小时和时长，动态展开为 N 组列（N 取所有交易中 STS 数量最大值）。同一 supplier 多条 STS 时 supplier 名称重复填充，不同 supplier 则分别填充。</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Columns (i = 1..N)</th><th>说明</th></tr>
+    <tr><td>supplier{i}</td><td>第 i 个加油 supplier 名称</td></tr>
+    <tr><td>start_STS{i}</td><td>开始日期（DD Mon YYYY）</td></tr>
+    <tr><td>starthour_STS{i}</td><td>开始小时（四舍五入）</td></tr>
+    <tr><td>end_STS{i}</td><td>结束日期（DD Mon YYYY）</td></tr>
+    <tr><td>endhour_STS{i}</td><td>结束小时（四舍五入）</td></tr>
+    <tr><td>duration_STS{i}</td><td>第 i 次 STS 加油时长（小时）</td></tr>
+  </table>
+  </div>
+  <p>最后加总为 <code>duration_STS</code>。</p>
+
+  <h3>2.3 新增变量 <span class="badge badge-fix">v3 新增</span></h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">🔢</div>
+      <h4>supplier_n</h4>
+      <p>本次 transaction 一共出现了多少个不重复的 supplier。通过对同一交易的所有 STS 行进行 supplier 去重计数得到。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">⏱</div>
+      <h4>end_STS_final / endhour_STS_final</h4>
+      <p>记录最后一个 supplier 加油的日期和小时。即按时间排序后的最后一次 STS 结束时间，用于分析最终加油完成时刻。</p>
+    </div>
+  </div>
+
+  <h3>2.4 Port 与 Draught</h3>
+  <p><strong>port：</strong>从 Anchorage 行匹配对照表，优先取成功匹配的；无匹配留空。<strong>unmatched_port：</strong>记录无法匹配的锚地原始文本。<strong>draught：</strong>取该交易所有行 draught 数值均值。</p>
+
+  <h3>2.5 去重</h3>
+  <p>删除除 transaction_id 外其他列完全相同的重复 transaction 记录。</p>
+
+  <h3>2.6 输出</h3>
+  <p>输出 <code>bunkering_final.xlsx</code>，每行一笔交易，列数 = 12 base + 6N STS + 4 trailer（含新增变量）。</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- STAGE 3: EXTERNAL MATCHING -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="animate-in delay-3">
+  <span class="s-num">Stage 3</span>
+  <h2>第三步：外部数据匹配 <span class="badge badge-match">新增需求</span></h2>
+
+  <p>使用 Stage 2 输出的 startdate、starthour、port 与两份外部数据按 date-hour-port 进行匹配，计算交易开始时间前后不同时间窗口的港口开放时长。</p>
+
+  <!-- ── Match 1: 锚地开放 ────────── -->
+  <h3>3.1 匹配锚地开放数据（锚地开放.dta）</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">📋</div>
+      <h4>数据结构</h4>
+      <p>date-hour-port 维度的 status（open / close）</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔗</div>
+      <h4>匹配键</h4>
+      <p>startdate + starthour + port（按交易开始时刻所在 date-hour-port 定位）</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📐</div>
+      <h4>时间窗口</h4>
+      <p>前后 ±6h、±12h、±24h 三个窗口</p>
+    </div>
+  </div>
+  <div class="formula-box">
+    <p><strong>计算逻辑：</strong>对每笔交易，查找其 startdate-starthour-port 匹配的锚地开放记录，统计从 (start - N) 到 (start + N) 时间窗口内 status = open 的小时数。</p>
+  </div>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>输出变量</th><th>含义</th></tr>
+    <tr><td>openhour_6</td><td>start 前后 ±6h 窗口锚地开放时长</td></tr>
+    <tr><td>openhour_12</td><td>start 前后 ±12h 窗口锚地开放时长</td></tr>
+    <tr><td>openhour_24</td><td>start 前后 ±24h 窗口锚地开放时长</td></tr>
+  </table>
+  </div>
+
+  <!-- ── Match 2: 气象预报 ────────── -->
+  <h3>3.2 匹配气象预报数据（气象预报.dta）</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">🌤</div>
+      <h4>数据结构</h4>
+      <p>date-hour-port 维度。气象指数：1 → 4（从坏到好）</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔗</div>
+      <h4>匹配键</h4>
+      <p>startdate + starthour + port</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🧪</div>
+      <h4>两种开放判定</h4>
+      <p>Version 1：阈值法 | Version 2：平均值法</p>
+    </div>
+  </div>
+
+  <h4>Version 1 — 阈值开放判定</h4>
+  <p>默认 1 = 不开放（closed），2 / 3 / 4 = 开放（open）。按此规则统计窗口内开放小时数。</p>
+
+  <h4>Version 2 — 平均值法开放判定</h4>
+  <p>基于各港口各气象指数的 historical closure frequency（关闭频率），计算某小时预报开放的期望概率：</p>
+  <div class="formula-box">
+    <p><strong>气象指数 k 对应的小时开放概率 =</strong> <code>1 - closure_frequency(port, k)</code></p>
+    <p><strong>窗口开放时长 =</strong> <code>&sum; [1 - closure_frequency(port, weather_index_hour_i)]</code>（对窗口内每个小时 i）</p>
+  </div>
+  <p>注意：closure frequency 表由用户提供，记录了各港口各指数的关闭频率。</p>
+
+  <h4>输出变量总览</h4>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>变量</th><th>版本</th><th>含义</th></tr>
+    <tr><td>openhourf_6_v1</td><td>V1 阈值法</td><td>±6h 窗口预报开放时长（1=关, 2/3/4=开）</td></tr>
+    <tr><td>openhourf_12_v1</td><td>V1 阈值法</td><td>±12h 窗口预报开放时长（1=关, 2/3/4=开）</td></tr>
+    <tr><td>openhourf_24_v1</td><td>V1 阈值法</td><td>±24h 窗口预报开放时长（1=关, 2/3/4=开）</td></tr>
+    <tr><td>openhourf_6_v2</td><td>V2 平均值法</td><td>±6h 窗口预报开放时长（1 - closure_freq 加权）</td></tr>
+    <tr><td>openhourf_12_v2</td><td>V2 平均值法</td><td>±12h 窗口预报开放时长（1 - closure_freq 加权）</td></tr>
+    <tr><td>openhourf_24_v2</td><td>V2 平均值法</td><td>±24h 窗口预报开放时长（1 - closure_freq 加权）</td></tr>
+  </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- COMPLETE VARIABLE LIST -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="animate-in delay-2">
+  <span class="s-num">Variables</span>
+  <h2>完整变量清单</h2>
+
+  <details>
+    <summary>Base 变量（12 列）</summary>
+    <div class="detail-content">
+      <table>
+        <tr><th>#</th><th>变量名</th><th>类型</th><th>说明</th></tr>
+        <tr><td>1</td><td>transaction_id</td><td>int</td><td>交易 ID</td></tr>
+        <tr><td>2</td><td>vessel_name</td><td>str</td><td>船名</td></tr>
+        <tr><td>3</td><td>vessel_code</td><td>str</td><td>船舶代码 (IMO)</td></tr>
+        <tr><td>4</td><td>vessel_type</td><td>str</td><td>船舶类型</td></tr>
+        <tr><td>5</td><td>vessel_status</td><td>str</td><td>服役状态</td></tr>
+        <tr><td>6</td><td>dwt</td><td>int</td><td>载重吨位</td></tr>
+        <tr><td>7</td><td>gt</td><td>int</td><td>总吨位</td></tr>
+        <tr><td>8</td><td>startdate</td><td>str</td><td>整体开始日期 (DD Mon YYYY)</td></tr>
+        <tr><td>9</td><td>starthour</td><td>int</td><td>整体开始小时</td></tr>
+        <tr><td>10</td><td>enddate</td><td>str</td><td>整体结束日期</td></tr>
+        <tr><td>11</td><td>endhour</td><td>int</td><td>整体结束小时</td></tr>
+        <tr><td>12</td><td>duration</td><td>int</td><td>总时长 (hours)</td></tr>
+      </table>
+    </div>
+  </details>
+
+  <details>
+    <summary>STS 展开变量（6 × N 列，N = max STS per transaction）</summary>
+    <div class="detail-content">
+      <table>
+        <tr><th>变量名 (i = 1..N)</th><th>类型</th><th>说明</th></tr>
+        <tr><td>supplier{i}</td><td>str</td><td>第 i 个 supplier 名称</td></tr>
+        <tr><td>start_STS{i}</td><td>str</td><td>第 i 次加油开始日期</td></tr>
+        <tr><td>starthour_STS{i}</td><td>int</td><td>第 i 次加油开始小时</td></tr>
+        <tr><td>end_STS{i}</td><td>str</td><td>第 i 次加油结束日期</td></tr>
+        <tr><td>endhour_STS{i}</td><td>int</td><td>第 i 次加油结束小时</td></tr>
+        <tr><td>duration_STS{i}</td><td>int</td><td>第 i 次加油时长</td></tr>
+      </table>
+    </div>
+  </details>
+
+  <details>
+    <summary>Trailer 变量 + Stage 2 新增（7 列）</summary>
+    <div class="detail-content">
+      <table>
+        <tr><th>变量名</th><th>类型</th><th>来源</th><th>说明</th></tr>
+        <tr><td>duration_STS</td><td>int</td><td>PDF</td><td>所有 STS 加油总时长</td></tr>
+        <tr><td>port</td><td>str</td><td>PDF</td><td>匹配的锚地端口（5 选 1 或空）</td></tr>
+        <tr><td>unmatched_port</td><td>str</td><td>补充</td><td>无匹配时记录原始锚地文本</td></tr>
+        <tr><td>draught</td><td>float</td><td>PDF</td><td>吃水深度均值</td></tr>
+        <tr><td>supplier_n</td><td>int</td><td>v3 新增</td><td>不重复 supplier 数量</td></tr>
+        <tr><td>end_STS_final</td><td>str</td><td>v3 新增</td><td>最后一次 STS 结束日期</td></tr>
+        <tr><td>endhour_STS_final</td><td>int</td><td>v3 新增</td><td>最后一次 STS 结束小时</td></tr>
+      </table>
+    </div>
+  </details>
+
+  <details>
+    <summary>Stage 3 匹配变量（9 列）</summary>
+    <div class="detail-content">
+      <table>
+        <tr><th>变量名</th><th>来源</th><th>说明</th></tr>
+        <tr><td>openhour_6</td><td>锚地开放</td><td>±6h 锚地开放时长</td></tr>
+        <tr><td>openhour_12</td><td>锚地开放</td><td>±12h 锚地开放时长</td></tr>
+        <tr><td>openhour_24</td><td>锚地开放</td><td>±24h 锚地开放时长</td></tr>
+        <tr><td>openhourf_6_v1</td><td>气象预报 V1</td><td>±6h 预报开放时长（阈值法）</td></tr>
+        <tr><td>openhourf_12_v1</td><td>气象预报 V1</td><td>±12h 预报开放时长（阈值法）</td></tr>
+        <tr><td>openhourf_24_v1</td><td>气象预报 V1</td><td>±24h 预报开放时长（阈值法）</td></tr>
+        <tr><td>openhourf_6_v2</td><td>气象预报 V2</td><td>±6h 预报开放时长（平均值法）</td></tr>
+        <tr><td>openhourf_12_v2</td><td>气象预报 V2</td><td>±12h 预报开放时长（平均值法）</td></tr>
+        <tr><td>openhourf_24_v2</td><td>气象预报 V2</td><td>±24h 预报开放时长（平均值法）</td></tr>
+      </table>
+    </div>
+  </details>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- REQUIREMENT TIMELINE -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="animate-in delay-3">
+  <span class="s-num">History</span>
+  <h2>需求演进时间线</h2>
+
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-label">Round 0</div>
+      <div class="tl-title">原始 PDF 需求（船加油数据处理思路.pdf）</div>
+      <div class="tl-desc">Vessel 信息提取 · 时间标准化 · Port 对照表匹配 · Supplier 提取 · Duration/Draught 解析 · 交易级别输出 · 去重校验</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-label">Round 1</div>
+      <div class="tl-title">补充需求 — 多 STS 展开 + 两步处理</div>
+      <div class="tl-desc">每条 STS 独立展开为多列 (supplier1..N, start_STS1..N, end_STS1..N, duration_STS1..N) · 多港口优先取匹配对照表者 · 分两阶段生成英文命名 Python 文件</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-label">Round 2 · v3</div>
+      <div class="tl-title">最新补充 — 数据修正 + 新增变量 + 外部匹配</div>
+      <div class="tl-desc">
+        <p>数据源升级为 Bunkering Record v3.xlsx · 小时四舍五入修正（跨日处理）· 新增 supplier_n / end_STS_final / endhour_STS_final</p>
+        <p>外部匹配：锚地开放.dta → openhour_6/12/24 · 气象预报.dta → openhourf_6/12/24_v1 + _v2（6 个变量）</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- OUTPUT FILES -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="animate-in delay-2">
+  <span class="s-num">Files</span>
+  <h2>输出文件清单</h2>
+
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>文件名</th><th>阶段</th><th>说明</th></tr>
+    <tr><td>C1_preprocess_bunkering.py</td><td>Stage 1</td><td>预处理脚本：读取 v3 原始数据 → 时间标准化 → 字段解析 → 预计算 port/supplier</td></tr>
+    <tr><td>C2_finalize_bunkering.py</td><td>Stage 2</td><td>聚合脚本：交易分组 → 多 STS 展开 → supplier_n 计算 → 输出最终数据</td></tr>
+    <tr><td>C3_external_match.py</td><td>Stage 3</td><td>匹配脚本：读取锚地开放.dta + 气象预报.dta → 计算开放时长变量 → 合并输出</td></tr>
+    <tr><td>2_bunkering_preprocessed.xlsx</td><td>Stage 1 输出</td><td>预处理中间数据（28 列）</td></tr>
+    <tr><td>3_bunkering_final.xlsx</td><td>Stage 2 输出</td><td>交易级别数据（无外部匹配变量）</td></tr>
+    <tr><td>4_bunkering_matched.xlsx</td><td>Stage 3 输出</td><td>最终完整数据集（含 openhour / openhourf 变量）</td></tr>
+  </table>
+  </div>
+</section>
+
+</div><!-- .container -->
+
+<footer>
+  Bunkering Data Processing Specification · Generated 2026-05 · Cherry Agent DA Project
+</footer>
+
+</body>
+</html>
