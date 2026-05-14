@@ -8,6 +8,8 @@ Reads the preprocessed xlsx and produces one row per transaction:
   - Per-STS expansion: supplier{N}, start_STS{N}, starthour_STS{N},
     end_STS{N}, endhour_STS{N}, duration_STS{N}  (N = 1..max_sts)
   - STS total: duration_STS  (sum of all per-STS durations)
+  - supplier_n: count of unique suppliers in the transaction
+  - end_STS_final / endhour_STS_final: latest STS end date and hour
   - Port: selected from anchorage rows (prefers matched reference port)
   - unmatched_port: raw anchorage location_details when no port matched
   - Draught: mean numeric draught across all rows in the transaction
@@ -157,6 +159,10 @@ def main():
 
         sts_fields = {}
         sts_total_duration = 0.0
+        # Track the latest STS end across all suppliers for end_STS_final
+        latest_sts_end_dt = None
+        latest_sts_end_fmt = ""
+        latest_sts_end_hour = ""
         for i, supp_name in enumerate(supplier_order, start=1):
             deliveries = supplier_groups[supp_name]
             # Aggregate across all deliveries of this supplier
@@ -187,6 +193,13 @@ def main():
             sts_fields[f"endhour_STS{i}"]   = int(end_delivery["end_hour"]) if pd.notna(end_delivery.get("end_hour")) else ""
             sts_fields[f"duration_STS{i}"]  = round(total_dur)
             sts_total_duration += total_dur
+
+            # Track latest STS end across all suppliers
+            if agg_end is not None and pd.notna(agg_end):
+                if latest_sts_end_dt is None or agg_end > latest_sts_end_dt:
+                    latest_sts_end_dt = agg_end
+                    latest_sts_end_fmt = str(end_delivery["end_formatted"]) if pd.notna(end_delivery.get("end_formatted")) else ""
+                    latest_sts_end_hour = int(end_delivery["end_hour"]) if pd.notna(end_delivery.get("end_hour")) else ""
 
         # Number of unique suppliers in this transaction
         supplier_n = len(supplier_order)
@@ -243,11 +256,13 @@ def main():
             "enddate":        enddate,
             "endhour":        endhour,
             "duration":       duration_total,
-            "supplier_n":     supplier_n,
+            "supplier_n":        supplier_n,
+            "end_STS_final":     latest_sts_end_fmt if latest_sts_end_fmt else "",
+            "endhour_STS_final": latest_sts_end_hour if latest_sts_end_hour != "" else "",
             **sts_fields,
-            "port":           port,
-            "unmatched_port": unmatched_port,
-            "draught":        draught,
+            "port":              port,
+            "unmatched_port":    unmatched_port,
+            "draught":           draught,
         }
         rows.append(row)
 
@@ -266,8 +281,8 @@ def main():
 
     # ── 6. Save formatted final Excel ──────────────────────────────────
     # Column structure:
-    #   [13 base columns] + [6 × max_sts STS columns] + [4 trailer columns]
-    # = 13 + 6*max_sts + 4 columns total
+    #   [15 base columns] + [6 × max_sts STS columns] + [4 trailer columns]
+    # = 15 + 6*max_sts + 4 columns total
     print(f"\nStep 6: Saving final file → {FINAL}")
 
     wb = openpyxl.Workbook()
@@ -279,7 +294,7 @@ def main():
         "transaction_id", "vessel_name", "vessel_code", "vessel_type", "vessel_status",
         "dwt", "gt",
         "startdate", "starthour", "enddate", "endhour", "duration",
-        "supplier_n",
+        "supplier_n", "end_STS_final", "endhour_STS_final",
     ]
     sts_headers = []
     for i in range(1, max_sts + 1):
@@ -315,6 +330,8 @@ def main():
             txn.get("endhour"),
             txn.get("duration"),
             txn.get("supplier_n"),
+            txn.get("end_STS_final"),
+            txn.get("endhour_STS_final"),
         ]
         sts_vals = []
         for j in range(1, max_sts + 1):
@@ -338,7 +355,7 @@ def main():
 
     # Column widths: base columns + dynamic STS columns + trailer columns
     col_widths = {}
-    # Base columns (1-13): transaction_id ~ supplier_n
+    # Base columns (1-15): transaction_id ~ endhour_STS_final
     col_widths[1] = 14   # transaction_id
     col_widths[2] = 30   # vessel_name
     col_widths[3] = 12   # vessel_code
@@ -352,8 +369,10 @@ def main():
     col_widths[11] = 12  # endhour
     col_widths[12] = 12  # duration
     col_widths[13] = 12  # supplier_n
-    # STS columns (14 through 13+6*max_sts): 6 columns per STS slot
-    base_col = 14
+    col_widths[14] = 16  # end_STS_final
+    col_widths[15] = 14  # endhour_STS_final
+    # STS columns (16 through 15+6*max_sts): 6 columns per STS slot
+    base_col = 16
     for i in range(1, max_sts + 1):
         col_widths[base_col + 0] = 18  # supplier{N}
         col_widths[base_col + 1] = 16  # start_STS{N}
