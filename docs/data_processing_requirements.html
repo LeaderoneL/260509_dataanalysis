@@ -382,7 +382,7 @@
   <p>从 STS 行的 Location Details 提取 supplier 名称（去掉 "With " 前缀）。清洗 <code>\xa0</code> 不间断空格。</p>
 
   <h3>1.9 预处理输出</h3>
-  <p>输出 <code>bunkering_preprocessed.xlsx</code>，28 列，保留所有行级字段（解析后的 datetime、标准化时间、port_matched、supplier 等），供后续处理使用。</p>
+  <p>输出 <code>2_bunkering_preprocessed.xlsx</code>（Python 脚本 <code>C1_preprocess_bunkering.py</code>），30 列，保留所有行级字段（解析后的 datetime、标准化时间、port_matched、supplier 等），共 4,422 行，供 Stage 2 使用。</p>
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->
