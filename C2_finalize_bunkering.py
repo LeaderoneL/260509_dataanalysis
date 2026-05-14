@@ -78,17 +78,20 @@ def main():
 
     # ── 3. Group and determine dynamic column count ────────────────────
     # The number of STS columns depends on the transaction with the most
-    # STS rows (max = 9 in this dataset).  Columns for unused slots are
-    # left empty so every row has a uniform schema.
+    # UNIQUE suppliers (not raw STS row count).  Same supplier doing
+    # multiple deliveries is aggregated into one slot.
     print("\nStep 3: Grouping by transaction_id")
     txns = df.groupby("transaction_id", sort=True)
 
     max_sts = 0
     for tid, grp in txns:
-        sts_count = int(grp["is_sts"].sum())
-        if sts_count > max_sts:
-            max_sts = sts_count
-    print(f"  Max STS per transaction: {max_sts}")
+        sts = grp[grp["is_sts"] == 1]
+        unique_supp = sts["supplier"].dropna()
+        unique_supp = unique_supp[unique_supp.astype(str).str.strip() != ""]
+        unique_count = unique_supp.nunique()
+        if unique_count > max_sts:
+            max_sts = unique_count
+    print(f"  Max unique suppliers per transaction: {max_sts}")
 
     # ── 4. Build transaction-level rows ────────────────────────────────
     print("\nStep 4: Building transaction-level rows")
@@ -121,43 +124,75 @@ def main():
         duration_total = duration_hours_between(overall_start, overall_end)
 
         # Retrieve the pre-formatted date string and rounded hour
-        # from the row with the min start and max end respectively
-        startdate = grp.loc[grp["start_dt"].idxmin(), "start_formatted"]
-        starthour = grp.loc[grp["start_dt"].idxmin(), "start_hour"]
-        enddate   = grp.loc[grp["end_dt"].idxmax(), "end_formatted"]
-        endhour   = grp.loc[grp["end_dt"].idxmax(), "end_hour"]
+        # from the row with the min start and max end respectively.
+        # Guard against all-NaT groups (should not happen with clean data).
+        start_idx = grp["start_dt"].idxmin() if overall_start is not pd.NaT else grp.index[0]
+        end_idx   = grp["end_dt"].idxmax()   if overall_end is not pd.NaT   else grp.index[0]
+        startdate = grp.loc[start_idx, "start_formatted"]
+        starthour = grp.loc[start_idx, "start_hour"]
+        enddate   = grp.loc[end_idx, "end_formatted"]
+        endhour   = grp.loc[end_idx, "end_hour"]
 
-        # ── STS expansion ──────────────────────────────────────────────
-        # Each STS row within the transaction becomes its own set of
-        # numbered columns (supplier{N}, start_STS{N}, etc.).
-        # Rows are sorted by start_dt so STS1 is the earliest.
-        # If the same supplier appears in multiple STS rows (e.g. same
-        # bunkering vessel making two deliveries), supplier1 and supplier2
-        # will both hold the same name — this is intentional per the
-        # user's supplementary requirement.
+        # ── STS expansion (grouped by UNIQUE supplier) ────────────────
+        # Rows with the same supplier (e.g. same bunkering vessel
+        # making multiple deliveries) are aggregated into one slot:
+        #   start = earliest STS start
+        #   end   = latest STS end
+        #   duration = sum of all per-delivery durations
+        # Supplier slots are ordered by first chronological appearance.
         sts_rows = grp[grp["is_sts"] == 1].sort_values("start_dt")
-        sts_count = len(sts_rows)
+
+        # Group by unique supplier name, preserving first-appearance order
+        supplier_order = []
+        supplier_groups = {}
+        for _, srow in sts_rows.iterrows():
+            supp_raw = srow.get("supplier")
+            supp = str(supp_raw).strip() if pd.notna(supp_raw) and str(supp_raw).strip() not in ("", "nan") else ""
+            if not supp:
+                continue
+            if supp not in supplier_groups:
+                supplier_groups[supp] = []
+                supplier_order.append(supp)
+            supplier_groups[supp].append(srow)
 
         sts_fields = {}
         sts_total_duration = 0.0
-        for i, (_, srow) in enumerate(sts_rows.iterrows(), start=1):
-            supp = str(srow["supplier"]) if pd.notna(srow["supplier"]) and srow["supplier"] else ""
-            sts_start = srow["start_dt"]
-            sts_end   = srow["end_dt"]
-            # Fall back to pre-parsed duration_hours when datetime is missing
-            dur = duration_hours_between(sts_start, sts_end,
-                                         fallback=srow.get("duration_hours", 0))
+        for i, supp_name in enumerate(supplier_order, start=1):
+            deliveries = supplier_groups[supp_name]
+            # Aggregate across all deliveries of this supplier
+            starts = [d["start_dt"] for d in deliveries if pd.notna(d["start_dt"])]
+            ends   = [d["end_dt"]   for d in deliveries if pd.notna(d["end_dt"])]
+            agg_start = min(starts) if starts else None
+            agg_end   = max(ends)   if ends   else None
 
-            sts_fields[f"supplier{i}"]      = supp
-            sts_fields[f"start_STS{i}"]     = str(srow["start_formatted"]) if pd.notna(srow["start_formatted"]) else ""
-            sts_fields[f"starthour_STS{i}"] = int(srow["start_hour"]) if pd.notna(srow["start_hour"]) else ""
-            sts_fields[f"end_STS{i}"]       = str(srow["end_formatted"]) if pd.notna(srow["end_formatted"]) else ""
-            sts_fields[f"endhour_STS{i}"]   = int(srow["end_hour"]) if pd.notna(srow["end_hour"]) else ""
-            sts_fields[f"duration_STS{i}"]  = dur
-            sts_total_duration += dur
+            # Total duration = sum of per-delivery durations
+            total_dur = 0.0
+            for d in deliveries:
+                dur = duration_hours_between(
+                    d["start_dt"], d["end_dt"],
+                    fallback=d.get("duration_hours", 0),
+                )
+                total_dur += dur
+
+            # Use the earliest delivery row for formatted date/hour
+            min_idx = deliveries[0]["start_dt"]  # already sorted by start_dt
+            # Find the delivery with min start_dt for start info
+            start_delivery = min(deliveries, key=lambda d: d["start_dt"] if pd.notna(d["start_dt"]) else pd.Timestamp.max)
+            end_delivery   = max(deliveries, key=lambda d: d["end_dt"]   if pd.notna(d["end_dt"])   else pd.Timestamp.min)
+
+            sts_fields[f"supplier{i}"]      = supp_name
+            sts_fields[f"start_STS{i}"]     = str(start_delivery["start_formatted"]) if pd.notna(start_delivery.get("start_formatted")) else ""
+            sts_fields[f"starthour_STS{i}"] = int(start_delivery["start_hour"]) if pd.notna(start_delivery.get("start_hour")) else ""
+            sts_fields[f"end_STS{i}"]       = str(end_delivery["end_formatted"]) if pd.notna(end_delivery.get("end_formatted")) else ""
+            sts_fields[f"endhour_STS{i}"]   = int(end_delivery["end_hour"]) if pd.notna(end_delivery.get("end_hour")) else ""
+            sts_fields[f"duration_STS{i}"]  = round(total_dur)
+            sts_total_duration += total_dur
+
+        # Number of unique suppliers in this transaction
+        supplier_n = len(supplier_order)
 
         # Pad unused STS slots with empty values for uniform columns
-        for i in range(sts_count + 1, max_sts + 1):
+        for i in range(supplier_n + 1, max_sts + 1):
             sts_fields[f"supplier{i}"]      = ""
             sts_fields[f"start_STS{i}"]     = ""
             sts_fields[f"starthour_STS{i}"] = ""
@@ -165,7 +200,7 @@ def main():
             sts_fields[f"endhour_STS{i}"]   = ""
             sts_fields[f"duration_STS{i}"]  = ""
 
-        # Total STS duration = sum of all individual STS durations
+        # Total STS duration = sum of all aggregated supplier durations
         sts_fields["duration_STS"] = round(sts_total_duration)
 
         # ── Port extraction ────────────────────────────────────────────
@@ -180,16 +215,18 @@ def main():
         unmatched_list = []
         anch_rows = grp[grp["is_anchorage"] == 1]
         for _, arow in anch_rows.iterrows():
-            ld = str(arow.get("location_details", "")) if pd.notna(arow.get("location_details")) else ""
-            pm = str(arow.get("port_matched", "")) if pd.notna(arow.get("port_matched")) else ""
-            if pm:
-                port = pm
+            ld = arow.get("location_details")
+            ld_str = str(ld).strip() if pd.notna(ld) else ""
+            pm = arow.get("port_matched")
+            pm_str = str(pm).strip() if pd.notna(pm) and str(pm).strip() not in ("", "nan") else ""
+            if pm_str:
+                port = pm_str
                 break                              # First match wins (priority order pre-determined)
-            if ld:
-                unmatched_list.append(ld)
+            if ld_str:
+                unmatched_list.append(ld_str)
 
         # unmatched_port is only populated when NO reference port matched,
-        # allowing manual review of the 28 unmatched transactions
+        # allowing manual review of unmatched transactions
         unmatched_port = "; ".join(unmatched_list) if not port and unmatched_list else ""
 
         # ── Draught ────────────────────────────────────────────────────
@@ -206,6 +243,7 @@ def main():
             "enddate":        enddate,
             "endhour":        endhour,
             "duration":       duration_total,
+            "supplier_n":     supplier_n,
             **sts_fields,
             "port":           port,
             "unmatched_port": unmatched_port,
@@ -228,8 +266,8 @@ def main():
 
     # ── 6. Save formatted final Excel ──────────────────────────────────
     # Column structure:
-    #   [12 base columns] + [6 × max_sts STS columns] + [4 trailer columns]
-    # = 12 + 6*9 + 4 = 70 columns for max_sts=9
+    #   [13 base columns] + [6 × max_sts STS columns] + [4 trailer columns]
+    # = 13 + 6*max_sts + 4 columns total
     print(f"\nStep 6: Saving final file → {FINAL}")
 
     wb = openpyxl.Workbook()
@@ -241,6 +279,7 @@ def main():
         "transaction_id", "vessel_name", "vessel_code", "vessel_type", "vessel_status",
         "dwt", "gt",
         "startdate", "starthour", "enddate", "endhour", "duration",
+        "supplier_n",
     ]
     sts_headers = []
     for i in range(1, max_sts + 1):
@@ -275,6 +314,7 @@ def main():
             txn.get("enddate"),
             txn.get("endhour"),
             txn.get("duration"),
+            txn.get("supplier_n"),
         ]
         sts_vals = []
         for j in range(1, max_sts + 1):
@@ -296,11 +336,40 @@ def main():
         for c, val in enumerate(all_vals, 1):
             ws.cell(row=r, column=c, value=val)
 
-    # Column widths: wider for text columns, standard for numeric
-    for col_letter in ["A", "B", "C", "D", "E", "F", "G"]:
-        ws.column_dimensions[col_letter].width = 20
-    for col_letter in ["H", "I", "J", "K", "L"]:
-        ws.column_dimensions[col_letter].width = 14
+    # Column widths: base columns + dynamic STS columns + trailer columns
+    col_widths = {}
+    # Base columns (1-13): transaction_id ~ supplier_n
+    col_widths[1] = 14   # transaction_id
+    col_widths[2] = 30   # vessel_name
+    col_widths[3] = 12   # vessel_code
+    col_widths[4] = 30   # vessel_type
+    col_widths[5] = 24   # vessel_status
+    col_widths[6] = 10   # dwt
+    col_widths[7] = 10   # gt
+    col_widths[8] = 16   # startdate
+    col_widths[9] = 12   # starthour
+    col_widths[10] = 16  # enddate
+    col_widths[11] = 12  # endhour
+    col_widths[12] = 12  # duration
+    col_widths[13] = 12  # supplier_n
+    # STS columns (14 through 13+6*max_sts): 6 columns per STS slot
+    base_col = 14
+    for i in range(1, max_sts + 1):
+        col_widths[base_col + 0] = 18  # supplier{N}
+        col_widths[base_col + 1] = 16  # start_STS{N}
+        col_widths[base_col + 2] = 14  # starthour_STS{N}
+        col_widths[base_col + 3] = 16  # end_STS{N}
+        col_widths[base_col + 4] = 14  # endhour_STS{N}
+        col_widths[base_col + 5] = 14  # duration_STS{N}
+        base_col += 6
+    # Trailer columns
+    col_widths[base_col + 0] = 14  # duration_STS
+    col_widths[base_col + 1] = 12  # port
+    col_widths[base_col + 2] = 40  # unmatched_port
+    col_widths[base_col + 3] = 12  # draught
+    for col_idx, width in col_widths.items():
+        col_letter = openpyxl.utils.get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = width
 
     wb.save(FINAL)
     print(f"  Saved {len(result)} rows × {len(all_headers)} columns")
@@ -324,22 +393,19 @@ def main():
         orig_anch = int(grp["is_anchorage"].sum())
 
         print(f"\n  Transaction {tid} ({processed['vessel_name']}):")
-        print(f"    Original: {len(grp)} rows ({orig_sts} STS, {orig_anch} Anchorage)")
+        print(f"    Original: {len(grp)} rows ({orig_sts} STS events, {orig_anch} Anchorage)")
+        print(f"    Unique suppliers: {processed.get('supplier_n', 0)}")
         print(f"    Overall: {processed['startdate']} H{processed['starthour']} → "
               f"{processed['enddate']} H{processed['endhour']} ({processed['duration']}h)")
 
-        # Count non-empty supplier cells to determine actual STS count
-        processed_sts = sum(1 for j in range(1, max_sts + 1)
-                          if pd.notna(processed.get(f"supplier{j}"))
-                          and str(processed.get(f"supplier{j}", "")).strip())
-        print(f"    STS count: {processed_sts}")
+        processed_sts = int(processed.get("supplier_n", 0))
         for j in range(1, min(processed_sts + 1, 6)):
-            print(f"      STS{j}: {processed[f'supplier{j}']} "
+            print(f"      Supplier{j}: {processed[f'supplier{j}']} "
                   f"{processed[f'start_STS{j}']} H{processed[f'starthour_STS{j}']} → "
                   f"{processed[f'end_STS{j}']} H{processed[f'endhour_STS{j}']} "
                   f"({processed[f'duration_STS{j}']}h)")
         if processed_sts > 5:
-            print(f"      ... and {processed_sts - 5} more STS entries")
+            print(f"      ... and {processed_sts - 5} more suppliers")
         print(f"    STS total: {processed['duration_STS']}h")
         print(f"    Port: {processed['port']}")
         print(f"    Draught: {processed['draught']}")
@@ -348,17 +414,13 @@ def main():
     print(f"\n  --- Global statistics ---")
     print(f"  Total transactions:       {len(result)}")
 
-    # Multi-STS: supplier2 is non-empty
-    multi_sts = result[
-        result["supplier2"].notna() & (result["supplier2"].astype(str).str.strip() != "")
-    ]
-    print(f"  Multi-STS transactions:   {len(multi_sts)}")
+    # Multi-supplier: supplier_n >= 2
+    multi_sts = result[result["supplier_n"] >= 2]
+    print(f"  Multi-supplier transactions: {len(multi_sts)}")
 
-    # Zero-STS: supplier1 is empty (transaction has only anchorage rows)
-    zero_sts = result[
-        result["supplier1"].isna() | (result["supplier1"].astype(str).str.strip().isin(["", "nan"]))
-    ]
-    print(f"  Zero-STS transactions:    {len(zero_sts)}")
+    # Zero-STS: supplier_n == 0 (transaction has only anchorage rows)
+    zero_sts = result[result["supplier_n"] == 0]
+    print(f"  Zero-STS transactions:       {len(zero_sts)}")
 
     # Port match rate
     no_port = result[result["port"].isna() | result["port"].astype(str).str.strip().isin(["", "nan"])]
