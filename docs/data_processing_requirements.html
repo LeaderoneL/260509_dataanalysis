@@ -227,24 +227,24 @@
       <div class="label">数据源</div>
     </div>
     <div class="stat">
-      <div class="num">2</div>
+      <div class="num">4</div>
       <div class="label">处理阶段</div>
     </div>
     <div class="stat">
-      <div class="num">~4400</div>
+      <div class="num">4,422</div>
       <div class="label">原始行数</div>
     </div>
     <div class="stat">
-      <div class="num">~1560</div>
+      <div class="num">1,543</div>
       <div class="label">最终交易数</div>
     </div>
     <div class="stat">
-      <div class="num">~879</div>
+      <div class="num">879</div>
       <div class="label">唯一船舶</div>
     </div>
   </div>
 
-  <p>本数据处理流程将从原始船加油记录出发，经过<strong>时间标准化预处理</strong>和<strong>交易级别聚合</strong>两个阶段，并匹配港口开放数据和气象预报数据，最终生成完整的交易级别分析数据集。</p>
+  <p>本数据处理流程包括<strong>四个阶段</strong>：<strong>时间标准化预处理</strong> → <strong>交易级别聚合</strong> → <strong>外部数据匹配</strong>（锚地开放 + 气象预报）→ <strong>统计分析</strong>，最终生成含匹配变量的完整交易级别数据集。</p>
 
   <div class="pipeline">
     <div class="pipe-step">
@@ -272,9 +272,15 @@
     </div>
     <div class="pipe-arrow">→</div>
     <div class="pipe-step">
+      <div class="step-num">STAGE 4</div>
+      <div class="step-title">统计分析</div>
+      <div class="step-detail">描述统计 + 回归</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
       <div class="step-num">OUTPUT</div>
       <div class="step-title">最终数据集</div>
-      <div class="step-detail">每行一笔交易</div>
+      <div class="step-detail">含匹配变量</div>
     </div>
   </div>
 </section>
@@ -296,7 +302,8 @@
     <div class="card">
       <div class="card-icon">⚓</div>
       <h4>锚地开放.dta</h4>
-      <p>港口锚地开放状态数据。记录 date-hour-port 维度的 status（open/close），用于计算交易开始前后特定时间窗口的港口开放时长。</p>
+      <p>港口锚地开放状态数据。记录 date-hour-port 维度的 status（Open / Closed），原因列 original_reason 记录关闭原因（如"风浪大"）。根据极端 case 回查原始数据后修正。</p>
+      <p style="margin-top:8px;font-size:12px;color:var(--text3);">5 列 (port, hour, status, original_reason, date_numeric) · 76,680 行 · 5 港口</p>
     </div>
     <div class="card">
       <div class="card-icon">🌤</div>
@@ -318,6 +325,9 @@
     <span class="badge badge-pdf">PDF 原始要求</span>
     <span class="badge badge-new">补充要求</span>
   </div>
+
+  <h3>1.0 数据修正 <span class="badge badge-fix">v3</span></h3>
+  <p>根据一次处理中发现的极端 case，回查原始数据检查错误，对收集的数据做了修正（此处略去修正细节），使用修正后的 <strong>Bunkering Record v3.xlsx</strong> 作为输入重新运行全流程。</p>
 
   <h3>1.1 Transaction ID 分配</h3>
   <p>原始数据无 transaction ID 列。以 vessel 列出现非空值作为新 transaction 的边界标记，为每一行分配递增的整数 transaction_id。</p>
@@ -401,8 +411,8 @@
   </table>
   </div>
 
-  <h3>2.2 多 STS 展开 <span class="badge badge-new">补充</span></h3>
-  <p>每笔 STS 单独记录日期、小时和时长，动态展开为 N 组列（N 取所有交易中 STS 数量最大值）。同一 supplier 多条 STS 时 supplier 名称重复填充，不同 supplier 则分别填充。</p>
+  <h3>2.2 多 STS 展开 <span class="badge badge-new">补充</span> <span class="badge badge-fix">v3 修正</span></h3>
+  <p>按 <strong>不重复的 supplier</strong> 进行聚合展开（非每次加油事件）。同一 supplier 在该交易中多次加油时，聚合为一条记录：start 取最早开始时间，end 取最晚结束时间，duration 为各次加油时长之和。supplier 按首次出现时间排序。动态展开为 N 组列（N 取所有交易中不重复 supplier 数量的最大值，当前为 5）。</p>
   <div class="tbl-wrap">
   <table>
     <tr><th>Columns (i = 1..N)</th><th>说明</th></tr>
@@ -437,7 +447,7 @@
   <p>删除除 transaction_id 外其他列完全相同的重复 transaction 记录。</p>
 
   <h3>2.6 输出</h3>
-  <p>输出 <code>bunkering_final.xlsx</code>，每行一笔交易，列数 = 12 base + 6N STS + 4 trailer（含新增变量）。</p>
+  <p>输出 <code>3_bunkering_final.xlsx</code>（Python 脚本 <code>C2_finalize_bunkering.py</code>），每行一笔交易。列结构：15 base (含 supplier_n, end_STS_final, endhour_STS_final) + 6N STS (N=5, max unique suppliers) + 4 trailer = 共 49 列。</p>
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -455,7 +465,7 @@
     <div class="card">
       <div class="card-icon">📋</div>
       <h4>数据结构</h4>
-      <p>date-hour-port 维度的 status（open / close）</p>
+      <p>5 列：<code>port</code>(str9), <code>hour</code>(byte 0-23), <code>status</code>("Open"/"Closed"), <code>original_reason</code>(关闭原因，如"风浪大"), <code>date_numeric</code>(%td 日期)。76,680 行覆盖 5 港口。</p>
     </div>
     <div class="card">
       <div class="card-icon">🔗</div>
@@ -469,7 +479,8 @@
     </div>
   </div>
   <div class="formula-box">
-    <p><strong>计算逻辑：</strong>对每笔交易，查找其 startdate-starthour-port 匹配的锚地开放记录，统计从 (start - N) 到 (start + N) 时间窗口内 status = open 的小时数。</p>
+    <p><strong>计算逻辑：</strong>对每笔交易，以 startdate-starthour 为中心，展开 ±N 小时窗口（N=6/12/24）内的所有 hour 级行，按 port + date + hour 匹配锚地开放记录，统计窗口内 status == "Open" 的小时数。</p>
+    <p><strong>匹配率：</strong>1,226/1,543（79.5%）。未匹配的交易多为 port 为空或 startdate 在锚地数据时间范围外。</p>
   </div>
   <div class="tbl-wrap">
   <table>
@@ -509,7 +520,7 @@
     <p><strong>气象指数 k 对应的小时开放概率 =</strong> <code>1 - closure_frequency(port, k)</code></p>
     <p><strong>窗口开放时长 =</strong> <code>&sum; [1 - closure_frequency(port, weather_index_hour_i)]</code>（对窗口内每个小时 i）</p>
   </div>
-  <p>注意：closure frequency 表由用户提供，记录了各港口各指数的关闭频率。</p>
+  <p><strong>closure frequency 来源：</strong>由于未提供独立的 closure frequency 表，当前实现从气象预报数据中<strong>经验性地计算</strong>各港口各气象指数的关闭频率：<code>closure_freq(port, k) = P(气象指数 == 1 | port, k)</code>。即对于每个 (port, weather_index) 组合，统计 weather_index == 1（关闭）的比例作为 closure frequency。气象预报数据匹配率：1,239/1,543（80.3%）。</p>
 
   <h4>输出变量总览</h4>
   <div class="tbl-wrap">
@@ -533,7 +544,7 @@
   <h2>完整变量清单</h2>
 
   <details>
-    <summary>Base 变量（12 列）</summary>
+    <summary>Base 变量（15 列）</summary>
     <div class="detail-content">
       <table>
         <tr><th>#</th><th>变量名</th><th>类型</th><th>说明</th></tr>
@@ -545,25 +556,28 @@
         <tr><td>6</td><td>dwt</td><td>int</td><td>载重吨位</td></tr>
         <tr><td>7</td><td>gt</td><td>int</td><td>总吨位</td></tr>
         <tr><td>8</td><td>startdate</td><td>str</td><td>整体开始日期 (DD Mon YYYY)</td></tr>
-        <tr><td>9</td><td>starthour</td><td>int</td><td>整体开始小时</td></tr>
+        <tr><td>9</td><td>starthour</td><td>int</td><td>整体开始小时（四舍五入）</td></tr>
         <tr><td>10</td><td>enddate</td><td>str</td><td>整体结束日期</td></tr>
-        <tr><td>11</td><td>endhour</td><td>int</td><td>整体结束小时</td></tr>
+        <tr><td>11</td><td>endhour</td><td>int</td><td>整体结束小时（四舍五入）</td></tr>
         <tr><td>12</td><td>duration</td><td>int</td><td>总时长 (hours)</td></tr>
+        <tr><td>13</td><td>supplier_n</td><td>int</td><td>不重复 supplier 数量 <span class="badge badge-fix">v3 新增</span></td></tr>
+        <tr><td>14</td><td>end_STS_final</td><td>str</td><td>最后一次 STS 结束日期 <span class="badge badge-fix">v3 新增</span></td></tr>
+        <tr><td>15</td><td>endhour_STS_final</td><td>int</td><td>最后一次 STS 结束小时 <span class="badge badge-fix">v3 新增</span></td></tr>
       </table>
     </div>
   </details>
 
   <details>
-    <summary>STS 展开变量（6 × N 列，N = max STS per transaction）</summary>
+    <summary>STS 展开变量（6 × N 列，N = max unique suppliers per transaction = 5）</summary>
     <div class="detail-content">
       <table>
         <tr><th>变量名 (i = 1..N)</th><th>类型</th><th>说明</th></tr>
-        <tr><td>supplier{i}</td><td>str</td><td>第 i 个 supplier 名称</td></tr>
-        <tr><td>start_STS{i}</td><td>str</td><td>第 i 次加油开始日期</td></tr>
-        <tr><td>starthour_STS{i}</td><td>int</td><td>第 i 次加油开始小时</td></tr>
-        <tr><td>end_STS{i}</td><td>str</td><td>第 i 次加油结束日期</td></tr>
-        <tr><td>endhour_STS{i}</td><td>int</td><td>第 i 次加油结束小时</td></tr>
-        <tr><td>duration_STS{i}</td><td>int</td><td>第 i 次加油时长</td></tr>
+        <tr><td>supplier{i}</td><td>str</td><td>第 i 个 supplier 名称（按首次出现时间排序）</td></tr>
+        <tr><td>start_STS{i}</td><td>str</td><td>该 supplier 加油开始日期（取最早）</td></tr>
+        <tr><td>starthour_STS{i}</td><td>int</td><td>该 supplier 加油开始小时（取最早）</td></tr>
+        <tr><td>end_STS{i}</td><td>str</td><td>该 supplier 加油结束日期（取最晚）</td></tr>
+        <tr><td>endhour_STS{i}</td><td>int</td><td>该 supplier 加油结束小时（取最晚）</td></tr>
+        <tr><td>duration_STS{i}</td><td>int</td><td>该 supplier 所有 delivery 加油时长之和</td></tr>
       </table>
     </div>
   </details>
@@ -629,6 +643,15 @@
         <p>外部匹配：锚地开放.dta → openhour_6/12/24 · 气象预报.dta → openhourf_6/12/24_v1 + _v2（6 个变量）</p>
       </div>
     </div>
+    <div class="tl-item">
+      <div class="tl-label">Round 3 · 最终</div>
+      <div class="tl-title">Stata 实现 + 锚地开放数据接入 + 统计分析</div>
+      <div class="tl-desc">
+        <p>Stage 3/4 改用 Stata .do 文件实现（C3_external_match.do / C4_analysis.do）· 锚地开放.dta 正式接入匹配流程（76,680 行 · 5 列）</p>
+        <p>多 STS 展开改为按 unique supplier 聚合（非每次加油事件）· 新增 Stage 4 统计分析（描述统计、港口对比、回归）</p>
+        <p>closure frequency V2 经验估计：从气象数据中计算 P(闭 | port, weather_index)</p>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -641,13 +664,15 @@
 
   <div class="tbl-wrap">
   <table>
-    <tr><th>文件名</th><th>阶段</th><th>说明</th></tr>
-    <tr><td>C1_preprocess_bunkering.py</td><td>Stage 1</td><td>预处理脚本：读取 v3 原始数据 → 时间标准化 → 字段解析 → 预计算 port/supplier</td></tr>
-    <tr><td>C2_finalize_bunkering.py</td><td>Stage 2</td><td>聚合脚本：交易分组 → 多 STS 展开 → supplier_n 计算 → 输出最终数据</td></tr>
-    <tr><td>C3_external_match.py</td><td>Stage 3</td><td>匹配脚本：读取锚地开放.dta + 气象预报.dta → 计算开放时长变量 → 合并输出</td></tr>
-    <tr><td>2_bunkering_preprocessed.xlsx</td><td>Stage 1 输出</td><td>预处理中间数据（28 列）</td></tr>
-    <tr><td>3_bunkering_final.xlsx</td><td>Stage 2 输出</td><td>交易级别数据（无外部匹配变量）</td></tr>
-    <tr><td>4_bunkering_matched.xlsx</td><td>Stage 3 输出</td><td>最终完整数据集（含 openhour / openhourf 变量）</td></tr>
+    <tr><th>文件名</th><th>阶段</th><th>类型</th><th>说明</th></tr>
+    <tr><td>C1_preprocess_bunkering.py</td><td>Stage 1</td><td>Python</td><td>预处理脚本：读取 v3 原始数据 → 时间标准化 → 字段解析 → 预计算 port/supplier</td></tr>
+    <tr><td>C2_finalize_bunkering.py</td><td>Stage 2</td><td>Python</td><td>聚合脚本：交易分组 → 按 unique supplier 聚合展开 → supplier_n/end_STS_final 计算</td></tr>
+    <tr><td>C3_external_match.do</td><td>Stage 3</td><td>Stata</td><td>匹配脚本：读取 锚地开放.dta + 气象预报.dta → 展开 ±6/12/24h 窗口 → 计算 9 个开放时长变量</td></tr>
+    <tr><td>C4_analysis.do</td><td>Stage 4</td><td>Stata</td><td>分析脚本：描述统计 + 港口对比 + 回归分析 + 导出汇总表</td></tr>
+    <tr><td>2_bunkering_preprocessed.xlsx</td><td>Stage 1 输出</td><td>Excel</td><td>预处理中间数据（30 列 · 4,422 行）</td></tr>
+    <tr><td>3_bunkering_final.xlsx</td><td>Stage 2 输出</td><td>Excel</td><td>交易级别聚合数据（49 列 · 1,543 行）</td></tr>
+    <tr><td>4_bunkering_matched.dta</td><td>Stage 3 输出</td><td>Stata</td><td>含匹配变量的完整数据集（60 变量 · 1,543 行）</td></tr>
+    <tr><td>C4_port_summary.xlsx</td><td>Stage 4 输出</td><td>Excel</td><td>港口级别汇总统计表</td></tr>
   </table>
   </div>
 </section>
