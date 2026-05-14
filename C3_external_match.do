@@ -170,17 +170,72 @@ foreach window in 6 12 24 {
 
 /*───────────────────────────────────────────────────────────────────────────
   5. Anchorage open/close data (锚地开放.dta)
-     Check availability; compute openhour_6/12/24 when file exists
+     Match on port + date + hour, count "Open" hours in each window
  ───────────────────────────────────────────────────────────────────────────*/
 
 display _n "--- 5. Anchorage open/close matching ---"
 
 capture confirm file "锚地开放.dta"
 if _rc == 0 {
-    display "  Found 锚地开放.dta — processing anchorage open hours..."
-    // TODO: implement when file structure is confirmed
-    // Expected variables: port, date, hour, status (open/close)
-    // Logic: expand transactions +/-N hours, merge, count status=="open"
+    display "  Found 锚地开放.dta, loading..."
+
+    // Load and standardize anchorage data
+    preserve
+    use "锚地开放.dta", clear
+
+    display "  Anchorage rows: " _N
+    display "  Status values:"
+    tab status
+
+    // Standardize variable names for merge
+    rename hour target_hour
+    rename date_numeric target_date
+    format target_date %tdDD_Mon_CCYY
+    // port already matches
+
+    // Keep only needed variables
+    keep port target_date target_hour status
+
+    // Create open indicator
+    gen is_open_anchor = (status == "Open") if !missing(status)
+
+    tempfile anchor_data
+    save `anchor_data'
+    restore
+
+    // Compute open hours for each window
+    foreach window in 6 12 24 {
+        display "  Processing +/-`window'h window (anchor)..."
+
+        preserve
+        keep transaction_id port startdate_stata starthour
+        drop if missing(port) | port == ""
+
+        gen expand_id = _n
+        local total = 2 * `window' + 1
+        expand `total'
+        bysort expand_id: gen hour_offset = _n - `window' - 1
+
+        gen double target_hour_raw = starthour + hour_offset
+        gen double target_date = startdate_stata + floor(target_hour_raw / 24)
+        gen target_hour = mod(target_hour_raw, 24)
+
+        keep transaction_id port target_date target_hour
+        drop if missing(target_date)
+
+        // Merge with anchorage data on port + date + hour
+        merge m:1 port target_date target_hour using `anchor_data', ///
+            keep(master match) nogen
+
+        // Count Open hours
+        gen open_anchor = is_open_anchor if !missing(is_open_anchor)
+
+        collapse (sum) openhour_`window' = open_anchor, by(transaction_id)
+
+        tempfile anchor_w`window'
+        save `anchor_w`window''
+        restore
+    }
 }
 else {
     display "  Note: 锚地开放.dta not found — anchorage open hours set to missing."
@@ -209,9 +264,21 @@ foreach var of varlist openhourf_* {
     replace `var' = 0 if missing(`var')
 }
 
-// Anchorage open hours (set to missing)
+// Anchorage open hours — merge if computed, else missing
 foreach window in 6 12 24 {
-    gen openhour_`window' = .
+    capture merge 1:1 transaction_id using `anchor_w`window'', nogen
+    if _rc == 0 {
+        display "  Merged openhour_`window'"
+    }
+    else {
+        gen openhour_`window' = .
+        display "  openhour_`window' set to missing"
+    }
+}
+
+// Fill missing anchorage hours with 0 for matched transactions
+foreach var of varlist openhour_6 openhour_12 openhour_24 {
+    capture replace `var' = 0 if missing(`var')
 }
 
 // Label all new variables
@@ -231,14 +298,23 @@ label variable openhour_24     "Anchorage open hours (+/-24h)"
 
 display _n "=== 7. Summary Statistics ==="
 
+display _n "--- Weather open hours ---"
 foreach var of varlist openhourf_* {
     display _n "  `var':"
     summarize `var'
 }
 
+display _n "--- Anchorage open hours ---"
+foreach var of varlist openhour_6 openhour_12 openhour_24 {
+    display _n "  `var':"
+    summarize `var'
+}
+
 // Match coverage
-count if openhourf_6_v1 > 0
-display _n "Transactions with non-zero weather V1 match: " r(N) " / " _N
+count if openhourf_6_v1 > 0 & !missing(openhourf_6_v1)
+display _n "Transactions with weather V1 match: " r(N) " / " _N
+count if openhour_6 > 0 & !missing(openhour_6)
+display "Transactions with anchorage match:   " r(N) " / " _N
 
 display _n "--- Saving 4_bunkering_matched.dta ---"
 compress

@@ -149,15 +149,62 @@ else {
 }
 
 /*───────────────────────────────────────────────────────────────────────────
+  5b. Anchorage open hours vs waiting time
+ ───────────────────────────────────────────────────────────────────────────*/
+
+display _n "=== 5b. Anchorage Analysis ==="
+
+capture confirm variable openhour_6
+if _rc == 0 {
+    display _n "--- Anchorage open hours summary ---"
+    summarize openhour_6 openhour_12 openhour_24
+
+    display _n "--- Correlation: anchorage open hours vs waiting ---"
+    foreach window in 6 12 24 {
+        correlate waiting_hours openhour_`window' ///
+            if !missing(openhour_`window')
+        display "  correlation(waiting, openhour_`window') = " r(rho)
+    }
+
+    display _n "--- Port-level anchorage effects ---"
+    foreach aport in "条帚门" "秀山东" "虾峙门" "衢山" "马峙" {
+        count if port == "`aport'" & !missing(openhour_12)
+        if r(N) >= 30 {
+            display _n "  Port: `aport'"
+            quietly summarize waiting_hours ///
+                if port == "`aport'" & openhour_12 >= 20
+            local high = r(mean)
+            quietly summarize waiting_hours ///
+                if port == "`aport'" & openhour_12 < 20
+            local low = r(mean)
+            display "    Avg waiting when open >=20h in +/-12h: " %5.1f `high'
+            display "    Avg waiting when open <20h in +/-12h:  " %5.1f `low'
+        }
+    }
+}
+
+/*───────────────────────────────────────────────────────────────────────────
   6. Regression analysis
  ───────────────────────────────────────────────────────────────────────────*/
 
 display _n "=== 6. Regression Analysis ==="
 
+// Model 0: Waiting time ~ anchorage open hours
+capture confirm variable openhour_12
+if _rc == 0 {
+    display _n "--- Model 0a: Waiting hours vs anchorage (12h window) ---"
+    quietly regress waiting_hours openhour_12
+    estimates store m0a
+
+    display _n "--- Model 0b: Model 0a + port FE ---"
+    quietly regress waiting_hours openhour_12 i.port_id
+    estimates store m0b
+}
+
 // Model 1: Waiting time ~ weather open hours (if weather data available)
 capture confirm variable openhourf_12_v1
 if _rc == 0 {
-    display _n "--- Model 1: Waiting hours vs weather (V1, ±12h window) ---"
+    display _n "--- Model 1: Waiting hours vs weather (V1, +/-12h window) ---"
     quietly regress waiting_hours openhourf_12_v1
     estimates store m1
 
@@ -169,7 +216,7 @@ if _rc == 0 {
     quietly regress waiting_hours openhourf_12_v1 i.port_id dwt gt
     estimates store m3
 
-    estimates table m1 m2 m3, ///
+    estimates table m0a m0b m1 m2 m3, ///
         star(0.10 0.05 0.01) stats(N r2 r2_a)
 }
 
