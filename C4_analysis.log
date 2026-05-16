@@ -3,7 +3,7 @@
        log:  /Users/leiqixiang/Library/CloudStorage/OneDrive-个人/Project/Cherr
 > y_Agent_DA/260509_dataanalysis/C4_analysis.log
   log type:  text
- opened on:  16 May 2026, 15:25:08
+ opened on:  16 May 2026, 15:27:26
 
 . 
 . di "Stage 4: Statistical Analysis"
@@ -13,16 +13,10 @@ Stage 4: Statistical Analysis
 ==================================================
 
 . 
-. di "Loading final matched dataset..."
-Loading final matched dataset...
-
 . use "4_bunkering_matched.dta", clear
 
-. di "  Observations: " _N
-  Observations: 1544
-
-. di "  Variables: " c(k)
-  Variables: 58
+. di "Dataset: " _N " observations, " c(k) " variables"
+Dataset: 1544 observations, 58 variables
 
 . 
 . * ============================================================
@@ -50,8 +44,8 @@ Transaction-level variables:
      draught |      1,543    .0747116    .3636223      -3.27        3.6
 
 . 
-. di "Anchorage open hours:"
-Anchorage open hours:
+. di "Anchorage open hours (openhour_6/12/24):"
+Anchorage open hours (openhour_6/12/24):
 
 . summarize openhour_6 openhour_12 openhour_24
 
@@ -62,8 +56,8 @@ Anchorage open hours:
  openhour_24 |      1,542     34.4546    17.61633          0         49
 
 . 
-. di "Weather forecast open hours (V1 threshold):"
-Weather forecast open hours (V1 threshold):
+. di "Weather forecast V1 (threshold):"
+Weather forecast V1 (threshold):
 
 . summarize openhourf_6_v1 openhourf_12_v1 openhourf_24_v1
 
@@ -74,8 +68,8 @@ openhou~2_v1 |      1,542    18.38716    9.675858          0         25
 openhou~4_v1 |      1,542    36.00519    17.41444          0         49
 
 . 
-. di "Weather forecast open hours (V2 probability):"
-Weather forecast open hours (V2 probability):
+. di "Weather forecast V2 (probability):"
+Weather forecast V2 (probability):
 
 . summarize openhourf_6_v2 openhourf_12_v2 openhourf_24_v2
 
@@ -114,10 +108,13 @@ Part B: Port Comparison
       Total |      1,541      100.00
 
 . 
-. di "Mean duration by port:"
-Mean duration by port:
+. foreach var in duration supplier_n openhour_6 openhourf_6_v1 openhourf_6_v2 {
+  2.     di ""
+  3.     di "Mean `var' by port:"
+  4.     bysort port: summarize `var'
+  5. }
 
-. bysort port: summarize duration
+Mean duration by port:
 
 -------------------------------------------------------------------------------
 -> port = 
@@ -162,158 +159,7 @@ Mean duration by port:
     duration |         96    139.6458    889.7339          5       8756
 
 
-. 
-. di "Mean openhour_6 by port:"
-Mean openhour_6 by port:
-
-. bysort port: summarize openhour_6
-
--------------------------------------------------------------------------------
--> port = 
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-  openhour_6 |          1           0           .          0          0
-
--------------------------------------------------------------------------------
--> port = 条帚门
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-  openhour_6 |        550        8.44     5.79547          0         13
-
--------------------------------------------------------------------------------
--> port = 秀山东
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-  openhour_6 |        466     10.2382    4.829693          0         13
-
--------------------------------------------------------------------------------
--> port = 虾峙门
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-  openhour_6 |        408    8.848039    5.546449          0         13
-
--------------------------------------------------------------------------------
--> port = 衢山
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-  openhour_6 |         21    10.71429    4.890223          0         13
-
--------------------------------------------------------------------------------
--> port = 马峙
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-  openhour_6 |         96    10.01042     4.96195          0         13
-
-
-. 
-. di "Mean openhourf_6_v1 by port:"
-Mean openhourf_6_v1 by port:
-
-. bysort port: summarize openhourf_6_v1
-
--------------------------------------------------------------------------------
--> port = 
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v1 |          1           0           .          0          0
-
--------------------------------------------------------------------------------
--> port = 条帚门
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v1 |        550    9.214545    5.554939          0         13
-
--------------------------------------------------------------------------------
--> port = 秀山东
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v1 |        466    9.892704    5.195663          0         13
-
--------------------------------------------------------------------------------
--> port = 虾峙门
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v1 |        408    9.539216    5.293678          0         13
-
--------------------------------------------------------------------------------
--> port = 衢山
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v1 |         21    10.66667    4.715224          0         13
-
--------------------------------------------------------------------------------
--> port = 马峙
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v1 |         96    9.760417    5.442029          0         13
-
-
-. 
-. di "Mean openhourf_6_v2 by port:"
-Mean openhourf_6_v2 by port:
-
-. bysort port: summarize openhourf_6_v2
-
--------------------------------------------------------------------------------
--> port = 
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v2 |          1           0           .          0          0
-
--------------------------------------------------------------------------------
--> port = 条帚门
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v2 |        550    7.230551    3.739692          0   10.48969
-
--------------------------------------------------------------------------------
--> port = 秀山东
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v2 |        466    9.705796    3.694544          0   12.20829
-
--------------------------------------------------------------------------------
--> port = 虾峙门
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v2 |        408    7.541487    3.448108          0   10.52865
-
--------------------------------------------------------------------------------
--> port = 衢山
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v2 |         21    8.997429    3.704171          0   11.76156
-
--------------------------------------------------------------------------------
--> port = 马峙
-
-    Variable |        Obs        Mean    Std. dev.       Min        Max
--------------+---------------------------------------------------------
-openhou~6_v2 |         96    9.215629    4.421965          0    12.1605
-
-
-. 
-. di "Mean supplier_n by port:"
 Mean supplier_n by port:
-
-. bysort port: summarize supplier_n
 
 -------------------------------------------------------------------------------
 -> port = 
@@ -358,21 +204,140 @@ Mean supplier_n by port:
   supplier_n |         96    1.354167    .6321087          1          5
 
 
-. 
-. di "Count by port:"
-Count by port:
+Mean openhour_6 by port:
 
-. tab port
+-------------------------------------------------------------------------------
+-> port = 
 
-       port |      Freq.     Percent        Cum.
-------------+-----------------------------------
-     条帚门 |        550       35.69       35.69
-     秀山东 |        466       30.24       65.93
-     虾峙门 |        408       26.48       92.41
-       衢山 |         21        1.36       93.77
-       马峙 |         96        6.23      100.00
-------------+-----------------------------------
-      Total |      1,541      100.00
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+  openhour_6 |          1           0           .          0          0
+
+-------------------------------------------------------------------------------
+-> port = 条帚门
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+  openhour_6 |        550        8.44     5.79547          0         13
+
+-------------------------------------------------------------------------------
+-> port = 秀山东
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+  openhour_6 |        466     10.2382    4.829693          0         13
+
+-------------------------------------------------------------------------------
+-> port = 虾峙门
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+  openhour_6 |        408    8.848039    5.546449          0         13
+
+-------------------------------------------------------------------------------
+-> port = 衢山
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+  openhour_6 |         21    10.71429    4.890223          0         13
+
+-------------------------------------------------------------------------------
+-> port = 马峙
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+  openhour_6 |         96    10.01042     4.96195          0         13
+
+
+Mean openhourf_6_v1 by port:
+
+-------------------------------------------------------------------------------
+-> port = 
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v1 |          1           0           .          0          0
+
+-------------------------------------------------------------------------------
+-> port = 条帚门
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v1 |        550    9.214545    5.554939          0         13
+
+-------------------------------------------------------------------------------
+-> port = 秀山东
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v1 |        466    9.892704    5.195663          0         13
+
+-------------------------------------------------------------------------------
+-> port = 虾峙门
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v1 |        408    9.539216    5.293678          0         13
+
+-------------------------------------------------------------------------------
+-> port = 衢山
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v1 |         21    10.66667    4.715224          0         13
+
+-------------------------------------------------------------------------------
+-> port = 马峙
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v1 |         96    9.760417    5.442029          0         13
+
+
+Mean openhourf_6_v2 by port:
+
+-------------------------------------------------------------------------------
+-> port = 
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v2 |          1           0           .          0          0
+
+-------------------------------------------------------------------------------
+-> port = 条帚门
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v2 |        550    7.230551    3.739692          0   10.48969
+
+-------------------------------------------------------------------------------
+-> port = 秀山东
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v2 |        466    9.705796    3.694544          0   12.20829
+
+-------------------------------------------------------------------------------
+-> port = 虾峙门
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v2 |        408    7.541487    3.448108          0   10.52865
+
+-------------------------------------------------------------------------------
+-> port = 衢山
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v2 |         21    8.997429    3.704171          0   11.76156
+
+-------------------------------------------------------------------------------
+-> port = 马峙
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v2 |         96    9.215629    4.421965          0    12.1605
+
 
 . 
 . * ============================================================
@@ -429,8 +394,8 @@ Part D: Regression Analysis
 ==================================================
 
 . 
-. di "Regression: duration ~ openhour_24 + supplier_n"
-Regression: duration ~ openhour_24 + supplier_n
+. di "(1) Base model: duration ~ openhour_24 + supplier_n"
+(1) Base model: duration ~ openhour_24 + supplier_n
 
 . regress duration openhour_24 supplier_n
 
@@ -450,8 +415,13 @@ Regression: duration ~ openhour_24 + supplier_n
 ------------------------------------------------------------------------------
 
 . 
-. di "Regression with port fixed effects:"
-Regression with port fixed effects:
+. di ""
+
+
+. di "(2) Port fixed effects: duration ~ openhour_24 + openhourf_24_v1 + openho
+> urf_24_v2 + supplier_n + i.port"
+(2) Port fixed effects: duration ~ openhour_24 + openhourf_24_v1 + openhourf_24
+> _v2 + supplier_n + i.port
 
 . regress duration openhour_24 openhourf_24_v1 openhourf_24_v2 supplier_n i.por
 > t_id
@@ -481,8 +451,13 @@ openhou~4_v2 |   3.586097    1.94175     1.85   0.065    -.2226718    7.394866
 ------------------------------------------------------------------------------
 
 . 
-. di "Regression: duration ~ openhour_6 + openhourf_6_v1 + openhourf_6_v2"
-Regression: duration ~ openhour_6 + openhourf_6_v1 + openhourf_6_v2
+. di ""
+
+
+. di "(3) 6h window model: duration ~ openhour_6 + openhourf_6_v1 + openhourf_6
+> _v2 + supplier_n"
+(3) 6h window model: duration ~ openhour_6 + openhourf_6_v1 + openhourf_6_v2 + 
+> supplier_n
 
 . regress duration openhour_6 openhourf_6_v1 openhourf_6_v2 supplier_n
 
@@ -531,9 +506,6 @@ Part E: Exporting Port Summary
 >     (mean) mean_openhourf_24_v2 = openhourf_24_v2, by(port)
 
 . 
-. di "Port summary table:"
-Port summary table:
-
 . list, noobs
 
   +-----------------------------------------------------------------+
@@ -602,27 +574,23 @@ Port summary table:
   |                            34.70311                             |
   +-----------------------------------------------------------------+
 
-. 
 . export excel "C4_port_summary.xlsx", firstrow(variables) replace
 file C4_port_summary.xlsx saved
-
-. di "Exported: C4_port_summary.xlsx"
-Exported: C4_port_summary.xlsx
 
 . 
 . di ""
 
 
-. di "Stage 4 (Statistical Analysis) complete!"
-Stage 4 (Statistical Analysis) complete!
+. di "Stage 4 complete!"
+Stage 4 complete!
 
-. di "Final output: C4_port_summary.xlsx"
-Final output: C4_port_summary.xlsx
+. di "Output: C4_port_summary.xlsx"
+Output: C4_port_summary.xlsx
 
 . log close
       name:  <unnamed>
        log:  /Users/leiqixiang/Library/CloudStorage/OneDrive-个人/Project/Cherr
 > y_Agent_DA/260509_dataanalysis/C4_analysis.log
   log type:  text
- closed on:  16 May 2026, 15:25:08
+ closed on:  16 May 2026, 15:27:26
 -------------------------------------------------------------------------------
