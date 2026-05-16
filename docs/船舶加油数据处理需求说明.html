@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>船舶加油交易数据处理需求说明</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.65;
+      color: #222;
+      max-width: 980px;
+      margin: 36px auto;
+      padding: 0 28px 56px;
+      background: #fafafa;
+    }
+    main {
+      background: #fff;
+      border: 1px solid #e6e6e6;
+      border-radius: 14px;
+      padding: 34px 42px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.04);
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0 0 8px;
+      color: #111;
+    }
+    .subtitle {
+      margin: 0 0 28px;
+      color: #666;
+      font-size: 14px;
+    }
+    h2 {
+      font-size: 20px;
+      margin: 34px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #eee;
+      color: #16324f;
+    }
+    h3 {
+      font-size: 16px;
+      margin: 22px 0 8px;
+      color: #243b53;
+    }
+    p, li {
+      font-size: 14.5px;
+    }
+    ul, ol {
+      padding-left: 22px;
+    }
+    code {
+      background: #f4f6f8;
+      padding: 2px 5px;
+      border-radius: 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 20px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px 10px;
+      vertical-align: top;
+    }
+    th {
+      background: #f0f4f8;
+      text-align: left;
+    }
+    .note {
+      background: #fff8e6;
+      border-left: 4px solid #f0b429;
+      padding: 10px 14px;
+      margin: 14px 0;
+      border-radius: 6px;
+    }
+    .check {
+      background: #eefaf0;
+      border-left: 4px solid #3aa655;
+      padding: 10px 14px;
+      margin: 14px 0;
+      border-radius: 6px;
+    }
+    .danger {
+      background: #fff0f0;
+      border-left: 4px solid #d64545;
+      padding: 10px 14px;
+      margin: 14px 0;
+      border-radius: 6px;
+    }
+    .small {
+      color: #666;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>船舶加油交易数据处理需求说明</h1>
+  <p class="subtitle">整合版：原始需求文档 + 补充修正要求。目标输出为 transaction-level 数据。</p>
+
+  <h2>一、处理目标</h2>
+  <p>将原始船舶加油记录整理为“一行代表一次 transaction”的结构化数据。每次交易可能包含排队等待（<code>anchorage</code>）和一次或多次加油（<code>STS-bunkering</code>）过程。处理后数据需要保留船舶信息、交易全过程时间、每次 STS 加油时间、supplier 信息、港口信息、时长变量，以及后续与锚地开放和气象预报数据匹配所需的变量。</p>
+
+  <div class="note">
+    <strong>数据版本：</strong>需要使用新修正的数据文件 <code>Bunkering Record v3.xlsx</code> 重新运行完整处理流程。
+  </div>
+
+  <h2>二、原始数据结构理解</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>原始字段 / 信息</th>
+        <th>含义</th>
+        <th>处理要求</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>第一列 vessel 信息</td>
+        <td>每当第一列出现信息，代表一个新的 transaction；其后空白行属于同一个 transaction。</td>
+        <td>向下填充空白；提取 vessel 名称、代码、类型、是否 in service / commission、DWT、GT。</td>
+      </tr>
+      <tr>
+        <td>Operations</td>
+        <td><code>anchorage</code> 表示排队等待；<code>STS-bunkering</code> 表示加油。</td>
+        <td>用于区分等待过程和加油过程。</td>
+      </tr>
+      <tr>
+        <td>start / end / duration</td>
+        <td>对应每一段等待或加油过程的起止时间与持续时间。</td>
+        <td>提取交易全过程起止时间、每次 STS 起止时间，并计算 duration。</td>
+      </tr>
+      <tr>
+        <td>Draught</td>
+        <td>吃水深度。</td>
+        <td>只提取数字部分，保存为 numeric 变量。</td>
+      </tr>
+      <tr>
+        <td>Location details</td>
+        <td>等待时记录锚地；加油时记录 supplier 船名。</td>
+        <td>等待记录用于识别 port；加油记录用于提取 supplier。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>三、交易层面基础变量</h2>
+  <h3>1. Vessel 信息</h3>
+  <p>每个 transaction 需要提取并保留以下变量：</p>
+  <ul>
+    <li><code>vessel_name</code>：船舶名称</li>
+    <li><code>vessel_code</code>：船舶代码 / 编号</li>
+    <li><code>vessel_type</code>：船舶类型</li>
+    <li><code>in_service_commission</code>：是否 in service / commission</li>
+    <li><code>dwt</code>：载重吨，numeric</li>
+    <li><code>gt</code>：总吨，numeric</li>
+    <li><code>draught</code>：吃水深度，只保留数字，numeric</li>
+  </ul>
+
+  <h3>2. Transaction 全过程时间</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>变量名</th>
+        <th>定义</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>startdate</code></td><td>该 transaction 全过程的开始日期。</td></tr>
+      <tr><td><code>starthour</code></td><td>该 transaction 全过程的开始小时，按最近小时四舍五入。</td></tr>
+      <tr><td><code>enddate</code></td><td>该 transaction 全过程的结束日期。</td></tr>
+      <tr><td><code>endhour</code></td><td>该 transaction 全过程的结束小时，按最近小时四舍五入。</td></tr>
+      <tr><td><code>duration</code></td><td>全过程持续时长，单位为小时，四舍五入。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="danger">
+    <strong>时间四舍五入修正：</strong>当分钟数四舍五入导致小时进位时，必须同步推进日期。例如 <code>2024/1/5 23:42</code> 应近似为 <code>2024/1/6 0点</code>，不能写成 <code>2024/1/5 0点</code>。
+  </div>
+
+  <h2>四、STS 加油过程变量</h2>
+  <p>一次 transaction 可能出现多个 supplier，或同一个 supplier 对应多条 STS-bunkering 记录。每一次 STS 都必须单独记录起止时间和时长。</p>
+
+  <h3>1. 单次 STS 变量命名规则</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>第 k 次 STS</th>
+        <th>变量</th>
+        <th>定义</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>STS 1</td>
+        <td><code>start_STS1</code>, <code>end_STS1</code>, <code>duration_STS1</code></td>
+        <td>第一次 STS 的开始时间、结束时间和时长。</td>
+      </tr>
+      <tr>
+        <td>STS 2</td>
+        <td><code>start_STS2</code>, <code>end_STS2</code>, <code>duration_STS2</code></td>
+        <td>第二次 STS 的开始时间、结束时间和时长。</td>
+      </tr>
+      <tr>
+        <td>STS k</td>
+        <td><code>start_STSk</code>, <code>end_STSk</code>, <code>duration_STSk</code></td>
+        <td>第 k 次 STS 的开始时间、结束时间和时长。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>同时保留总体加油时长：</p>
+  <ul>
+    <li><code>duration_STS</code>：该 transaction 中所有 <code>duration_STS1</code>、<code>duration_STS2</code>、…… 的加总。</li>
+    <li><code>end_STS_final</code>：最后一次 supplier 加油的结束日期。</li>
+    <li><code>endhour_STS_final</code>：最后一次 supplier 加油的结束小时。</li>
+  </ul>
+
+  <h3>2. Supplier 变量命名规则</h3>
+  <p>每次 STS 对应一个 supplier，按出现顺序记录：</p>
+  <ul>
+    <li><code>supplier1</code>：第一次 STS 对应 supplier。</li>
+    <li><code>supplier2</code>：第二次 STS 对应 supplier。</li>
+    <li><code>supplierk</code>：第 k 次 STS 对应 supplier。</li>
+    <li><code>supplier_n</code>：该 transaction 中出现的 supplier 数量。</li>
+  </ul>
+
+  <div class="note">
+    如果同一个 supplier 出现多条 STS 记录，也要按 STS 次数拆开。因此 <code>supplier1</code> 和 <code>supplier2</code> 可能是同一个 supplier 名称；<code>supplier_n</code> 应按 STS 记录次数 / supplier 出现次数计算，而不是按去重后的 supplier 数计算，除非后续另行指定。
+  </div>
+
+  <h3>3. Supplier 名称提取</h3>
+  <p>当 <code>Location details</code> 中出现类似 <code>With Fu Jie 168</code> 时，应提取为：</p>
+  <ul>
+    <li><code>supplier = Fu Jie 168</code></li>
+  </ul>
+
+  <h2>五、港口 port 识别规则</h2>
+  <p>只有出现在港口对照表中的港口才被认定为加油港口。等待锚地信息来自 <code>Location details</code>，需要映射为统一中文港口名称。</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>原始 / 英文锚地名称</th>
+        <th>标准中文 port</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Zhoushan Tide and Berth Waiting Anchorage</td><td>秀山东</td></tr>
+      <tr><td>Zhoushan Mashi (No1/No2/Dangerous Goods) Anchorage</td><td>马峙</td></tr>
+      <tr><td>Zhoushan Xiazhimen South Anchorage</td><td>条帚门</td></tr>
+      <tr><td>Zhoushan Xiazhimen North Anchorage</td><td>虾峙门</td></tr>
+      <tr><td>Zhoushan Qushan Bunkering Anchorage</td><td>衢山</td></tr>
+    </tbody>
+  </table>
+
+  <h3>1. 多港口与未匹配港口规则</h3>
+  <ul>
+    <li>如果同一条 transaction 下，<code>port</code> 中的港口全部不在对照表里，则该交易后续不需要使用；<code>port</code> 可留空，便于后期删除。</li>
+    <li>如果同一条 transaction 下出现多个港口，其中部分在对照表中、部分不在对照表中，则使用出现在对照表中的港口。</li>
+    <li>如果同一条 transaction 下出现多个均在对照表中的港口，应保留可追溯信息，并标记为需人工核查，除非业务规则指定优先顺序。</li>
+  </ul>
+
+  <h3>2. 模糊名称 / 缩写处理</h3>
+  <p>港口名称需要允许常见模糊写法、缩写和截断。例如：</p>
+  <ul>
+    <li><code>At Zhoushan Xiazhimen Sou</code> 应识别为 <code>Zhoushan Xiazhimen South Anchorage</code>，即 <code>条帚门</code>。</li>
+  </ul>
+
+  <div class="check">
+    建议建立一张“港口原始写法—标准港口名称”模糊匹配表，并输出未匹配名称列表，供人工检查后迭代更新。
+  </div>
+
+  <h2>六、去重与一致性检查</h2>
+  <ol>
+    <li>删除重复的加油记录 duplicate。</li>
+    <li>处理完成后，将整理后的 transaction 数量、STS 数量、supplier 数量、港口匹配数量与原始数据进行核对。</li>
+    <li>重点检查多 STS、多 supplier、同 supplier 多条 STS、跨日四舍五入、港口未匹配等 case。</li>
+    <li>保留 <code>transaction_id</code>，方便后续与其他数据集匹配。</li>
+  </ol>
+
+  <h2>七、与锚地开放数据匹配</h2>
+  <p>基于每次 transaction 的 <code>startdate</code>、<code>starthour</code>、<code>port</code>，与 <code>锚地开放.dta</code> 进行匹配。</p>
+
+  <h3>1. 外部数据说明</h3>
+  <ul>
+    <li>数据粒度：<code>date-hour-port</code></li>
+    <li>核心变量：<code>status</code>，表示 <code>open</code> 或 <code>close</code></li>
+  </ul>
+
+  <h3>2. 生成变量</h3>
+  <p>对于每次 transaction，计算其 <code>startdate-starthour</code> 前后 6 小时、12 小时、24 小时内，该 port 的开放时长，单位为小时。</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>变量名</th>
+        <th>定义</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>openhour_6</code></td><td>交易开始时间前后 6 小时窗口内，实际开放小时数。</td></tr>
+      <tr><td><code>openhour_12</code></td><td>交易开始时间前后 12 小时窗口内，实际开放小时数。</td></tr>
+      <tr><td><code>openhour_24</code></td><td>交易开始时间前后 24 小时窗口内，实际开放小时数。</td></tr>
+    </tbody>
+  </table>
+
+  <p class="small">说明：这里“前后 6 小时”理解为以交易开始时点为中心的窗口，即从 t-6 到 t+6；12 和 24 小时同理。如业务上希望改成“开始前 6 / 12 / 24 小时”，需另行确认。</p>
+
+  <h2>八、与气象预报数据匹配</h2>
+  <p>基于每次 transaction 的 <code>startdate</code>、<code>starthour</code>、<code>port</code>，与 <code>气象预报.dta</code> 进行匹配。</p>
+
+  <h3>1. 外部数据说明</h3>
+  <ul>
+    <li>数据粒度：<code>date-hour-port</code></li>
+    <li>核心变量：预报气象指数，取值为 <code>1</code>、<code>2</code>、<code>3</code>、<code>4</code>，从坏到好。</li>
+  </ul>
+
+  <h3>2. 预报开放时长计算：版本 1</h3>
+  <p>默认规则：</p>
+  <ul>
+    <li>指数 <code>1</code> = 不开放</li>
+    <li>指数 <code>2</code>、<code>3</code>、<code>4</code> = 开放</li>
+  </ul>
+
+  <table>
+    <thead>
+      <tr>
+        <th>变量名</th>
+        <th>定义</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>openhourf_6_v1</code></td><td>交易开始时间前后 6 小时窗口内，按版本 1 规则计算的预报开放小时数。</td></tr>
+      <tr><td><code>openhourf_12_v1</code></td><td>交易开始时间前后 12 小时窗口内，按版本 1 规则计算的预报开放小时数。</td></tr>
+      <tr><td><code>openhourf_24_v1</code></td><td>交易开始时间前后 24 小时窗口内，按版本 1 规则计算的预报开放小时数。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3. 预报开放时长计算：版本 2</h3>
+  <p>按照气象指数对应的 closure frequency 计算。若表中给出的是 closure frequency，则开放概率为：</p>
+  <p><code>open probability = 1 - closure frequency</code></p>
+  <p>每个小时不再简单记为 0 或 1，而是按对应指数的开放概率加总。</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>变量名</th>
+        <th>定义</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>openhourf_6_v2</code></td><td>交易开始时间前后 6 小时窗口内，按版本 2 规则计算的预报开放小时数。</td></tr>
+      <tr><td><code>openhourf_12_v2</code></td><td>交易开始时间前后 12 小时窗口内，按版本 2 规则计算的预报开放小时数。</td></tr>
+      <tr><td><code>openhourf_24_v2</code></td><td>交易开始时间前后 24 小时窗口内，按版本 2 规则计算的预报开放小时数。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    版本 2 需要补充气象指数 1、2、3、4 分别对应的 closure frequency 表。当前说明中只给出了计算原则，未给出具体数值。
+  </div>
+
+  <h2>九、最终输出变量清单</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>类别</th>
+        <th>变量</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>识别变量</td>
+        <td><code>transaction_id</code></td>
+      </tr>
+      <tr>
+        <td>船舶信息</td>
+        <td><code>vessel_name</code>, <code>vessel_code</code>, <code>vessel_type</code>, <code>in_service_commission</code>, <code>dwt</code>, <code>gt</code>, <code>draught</code></td>
+      </tr>
+      <tr>
+        <td>全过程时间</td>
+        <td><code>startdate</code>, <code>starthour</code>, <code>enddate</code>, <code>endhour</code>, <code>duration</code></td>
+      </tr>
+      <tr>
+        <td>港口</td>
+        <td><code>port</code></td>
+      </tr>
+      <tr>
+        <td>STS / supplier</td>
+        <td><code>supplier1</code>, <code>supplier2</code>, …；<code>supplier_n</code>；<code>start_STS1</code>, <code>end_STS1</code>, <code>duration_STS1</code>, …；<code>duration_STS</code>；<code>end_STS_final</code>, <code>endhour_STS_final</code></td>
+      </tr>
+      <tr>
+        <td>锚地开放匹配</td>
+        <td><code>openhour_6</code>, <code>openhour_12</code>, <code>openhour_24</code></td>
+      </tr>
+      <tr>
+        <td>气象预报匹配</td>
+        <td><code>openhourf_6_v1</code>, <code>openhourf_12_v1</code>, <code>openhourf_24_v1</code>, <code>openhourf_6_v2</code>, <code>openhourf_12_v2</code>, <code>openhourf_24_v2</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>十、交付检查清单</h2>
+  <ol>
+    <li>是否使用 <code>Bunkering Record v3.xlsx</code> 重新处理。</li>
+    <li>是否做到一行一个 transaction。</li>
+    <li>是否正确向下填充 vessel 信息。</li>
+    <li>是否提取 vessel_name、代码、类型、状态、DWT、GT、draught。</li>
+    <li>是否正确识别 anchorage 与 STS-bunkering。</li>
+    <li>是否支持多条 STS，并生成 <code>start_STS1</code>、<code>end_STS1</code>、<code>duration_STS1</code> 等变量。</li>
+    <li>是否支持多 supplier / 同 supplier 多 STS 的拆分记录。</li>
+    <li>是否生成 <code>supplier_n</code>。</li>
+    <li>是否生成 <code>end_STS_final</code> 与 <code>endhour_STS_final</code>。</li>
+    <li>是否修正跨日小时四舍五入问题。</li>
+    <li>是否只把对照表中的港口识别为有效加油港口。</li>
+    <li>是否处理港口缩写和模糊名称，如 <code>At Zhoushan Xiazhimen Sou</code>。</li>
+    <li>是否删除 duplicate。</li>
+    <li>是否保留 <code>transaction_id</code>。</li>
+    <li>是否与 <code>锚地开放.dta</code> 匹配并生成 <code>openhour_6</code>、<code>openhour_12</code>、<code>openhour_24</code>。</li>
+    <li>是否与 <code>气象预报.dta</code> 匹配并生成六个 forecast open hour 变量。</li>
+    <li>是否输出未匹配港口、重复记录、多港口、多 STS 的核查日志。</li>
+  </ol>
+</main>
+</body>
+</html>
