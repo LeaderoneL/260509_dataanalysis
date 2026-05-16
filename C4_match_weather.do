@@ -2,7 +2,7 @@ clear all
 set more off
 set maxvar 10000
 
-cd "/Users/leiqixiang/Library/CloudStorage/OneDrive-个人/Project/Cherry_Agent_DA/260509_dataanalysis"
+
 
 capture log close
 log using "C4_match_weather.log", replace
