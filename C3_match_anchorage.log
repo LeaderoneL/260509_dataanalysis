@@ -3,7 +3,7 @@
        log:  /Users/leiqixiang/Library/CloudStorage/OneDrive-个人/Project/Cherr
 > y_Agent_DA/260509_dataanalysis/C3_match_anchorage.log
   log type:  text
- opened on:  16 May 2026, 10:26:34
+ opened on:  16 May 2026, 15:14:40
 
 . 
 . di "Stage 3: Matching Anchorage Open Data"
@@ -121,7 +121,7 @@ Saving expanded bunkering data...
 . tempfile expanded
 
 . save `expanded'
-file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St54840.000002 saved
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St68613.000002 saved
     as .dta format
 
 . 
@@ -159,7 +159,7 @@ Saving anchorage data...
 . tempfile anchorage
 
 . save `anchorage'
-file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St54840.000003 saved
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St68613.000003 saved
     as .dta format
 
 . 
@@ -235,7 +235,7 @@ Saving open hours data...
 . tempfile openhours
 
 . save `openhours'
-file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St54840.000004 saved
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St68613.000004 saved
     as .dta format
 
 . 
@@ -286,7 +286,6 @@ Summary of open hours:
 Saving intermediate result...
 
 . save "3_bunkering_with_openhours.dta", replace
-(file 3_bunkering_with_openhours.dta not found)
 file 3_bunkering_with_openhours.dta saved
 
 . export excel "3_bunkering_with_openhours.xlsx", firstrow(variables) replace
@@ -301,5 +300,5 @@ Stage 3 (Anchorage matching) complete!
        log:  /Users/leiqixiang/Library/CloudStorage/OneDrive-个人/Project/Cherr
 > y_Agent_DA/260509_dataanalysis/C3_match_anchorage.log
   log type:  text
- closed on:  16 May 2026, 10:26:35
+ closed on:  16 May 2026, 15:14:41
 -------------------------------------------------------------------------------

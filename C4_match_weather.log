@@ -3,7 +3,7 @@
        log:  /Users/leiqixiang/Library/CloudStorage/OneDrive-个人/Project/Cherr
 > y_Agent_DA/260509_dataanalysis/C4_match_weather.log
   log type:  text
- opened on:  16 May 2026, 10:27:18
+ opened on:  16 May 2026, 15:15:21
 
 . 
 . di "Stage 4: Matching Weather Forecast Data"
@@ -118,7 +118,7 @@ Saving closure frequency table...
 . tempfile closure_freq
 
 . save `closure_freq'
-file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St54890.000002 saved
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St68638.000002 saved
     as .dta format
 
 . 
@@ -222,7 +222,7 @@ Saving expanded bunkering data...
 . tempfile expanded
 
 . save `expanded'
-file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St54890.000003 saved
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St68638.000003 saved
     as .dta format
 
 . 
@@ -255,7 +255,7 @@ Saving weather data...
 . tempfile weather
 
 . save `weather'
-file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St54890.000004 saved
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St68638.000004 saved
     as .dta format
 
 . 
@@ -386,7 +386,7 @@ Saving weather match data...
 . tempfile weather_match
 
 . save `weather_match'
-file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St54890.000005 saved
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St68638.000005 saved
     as .dta format
 
 . 
@@ -468,7 +468,6 @@ openhou~4_v2 |      1,542    30.89894    13.46454          0   46.01588
 Saving final result...
 
 . save "4_bunkering_matched.dta", replace
-(file 4_bunkering_matched.dta not found)
 file 4_bunkering_matched.dta saved
 
 . export excel "4_bunkering_matched.xlsx", firstrow(variables) replace
@@ -486,5 +485,5 @@ Final output: 4_bunkering_matched.xlsx
        log:  /Users/leiqixiang/Library/CloudStorage/OneDrive-个人/Project/Cherr
 > y_Agent_DA/260509_dataanalysis/C4_match_weather.log
   log type:  text
- closed on:  16 May 2026, 10:27:19
+ closed on:  16 May 2026, 15:15:22
 -------------------------------------------------------------------------------
