@@ -268,13 +268,13 @@ summary = f"""# Processing Summary — {datetime.now().strftime('%Y-%m-%d %H:%M:
 - v1 openhourf_6 mean: {tx_final['openhourf_6_v1'].mean():.1f}
 - v1 openhourf_12 mean: {tx_final['openhourf_12_v1'].mean():.1f}
 - v1 openhourf_24 mean: {tx_final['openhourf_24_v1'].mean():.1f}
-- v2 openhourf_6 mean (provisional): {tx_final['openhourf_6_v2'].mean():.1f}
-- v2 openhourf_12 mean (provisional): {tx_final['openhourf_12_v2'].mean():.1f}
-- v2 openhourf_24 mean (provisional): {tx_final['openhourf_24_v2'].mean():.1f}
+- v2 openhourf_6 mean: {tx_final['openhourf_6_v2'].mean():.1f}
+- v2 openhourf_12 mean: {tx_final['openhourf_12_v2'].mean():.1f}
+- v2 openhourf_24 mean: {tx_final['openhourf_24_v2'].mean():.1f}
 
-## Warnings
-- v2 closure frequency is PROVISIONAL: {{1: 1.0, 2: 0.5, 3: 0.2, 4: 0.0}}
-- Replace with actual closure frequency table before final delivery.
+## Closure Frequency Source
+- closure_frequency.csv: port-specific closure frequencies (Nov 2022 – Jul 2024)
+- v2 uses port-specific open probability = 1 - closure_frequency
 
 ## Log Files
 - unmatched_ports.xlsx

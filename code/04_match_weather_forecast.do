@@ -47,13 +47,11 @@ sort port weather_dt
 save `tx', replace
 
 * ═══════════════════════════════════════════════════════════════
-* Provisional closure frequency table
-* REPLACE WITH ACTUAL VALUES BEFORE FINAL DELIVERY
+* Port-specific closure frequency (from closure_frequency.csv)
+* Open prob = 1 - closure_freq for each port-MIO combination.
+* NOTE: v2 computation in Stata uses a simplified block; for full
+*       port-specific v2, use the Python pipeline.
 * ═══════════════════════════════════════════════════════════════
-* index 1 -> closed prob 1.00
-* index 2 -> closed prob 0.50
-* index 3 -> closed prob 0.20
-* index 4 -> closed prob 0.00
 
 * ── Match using frame-based lookup ─────────────────────────────
 use `tx', clear
@@ -107,8 +105,12 @@ quietly {
                 }
                 replace openhourf_6_v1 = r(N) in `i'
 
-                * v2: sum (1 - closure_frequency) over matched indices (provisional)
-                * We need to get each index value; for simplicity, count by category
+                * v2: sum open probabilities (Average closure freq from CSV)
+                * Avg open prob: idx1=0.28, idx2=0.73, idx3=0.87, idx4=0.88
+                frame weather_data {
+                    count if port == "`p'" & weather_dt >= `t_m6' & weather_dt <= `t_p6' & windex == 1
+                }
+                local n1 = r(N)
                 frame weather_data {
                     count if port == "`p'" & weather_dt >= `t_m6' & weather_dt <= `t_p6' & windex == 2
                 }
@@ -120,8 +122,9 @@ quietly {
                 frame weather_data {
                     count if port == "`p'" & weather_dt >= `t_m6' & weather_dt <= `t_p6' & windex == 4
                 }
-                local total_6 = `n2' * 0.50 + `n3' * 0.80 + r(N) * 1.00
-                replace openhourf_6_v2 = `total_6' in `i'
+                local n4 = r(N)
+                local v2_6 = `n1' * 0.28 + `n2' * 0.73 + `n3' * 0.87 + `n4' * 0.88
+                replace openhourf_6_v2 = `v2_6' in `i'
             }
 
             * ── Window 12 ──
@@ -138,6 +141,10 @@ quietly {
                 replace openhourf_12_v1 = r(N) in `i'
 
                 frame weather_data {
+                    count if port == "`p'" & weather_dt >= `t_m12' & weather_dt <= `t_p12' & windex == 1
+                }
+                local n1 = r(N)
+                frame weather_data {
                     count if port == "`p'" & weather_dt >= `t_m12' & weather_dt <= `t_p12' & windex == 2
                 }
                 local n2 = r(N)
@@ -148,8 +155,9 @@ quietly {
                 frame weather_data {
                     count if port == "`p'" & weather_dt >= `t_m12' & weather_dt <= `t_p12' & windex == 4
                 }
-                local total_12 = `n2' * 0.50 + `n3' * 0.80 + r(N) * 1.00
-                replace openhourf_12_v2 = `total_12' in `i'
+                local n4 = r(N)
+                local v2_12 = `n1' * 0.28 + `n2' * 0.73 + `n3' * 0.87 + `n4' * 0.88
+                replace openhourf_12_v2 = `v2_12' in `i'
             }
 
             * ── Window 24 ──
@@ -166,6 +174,10 @@ quietly {
                 replace openhourf_24_v1 = r(N) in `i'
 
                 frame weather_data {
+                    count if port == "`p'" & weather_dt >= `t_m24' & weather_dt <= `t_p24' & windex == 1
+                }
+                local n1 = r(N)
+                frame weather_data {
                     count if port == "`p'" & weather_dt >= `t_m24' & weather_dt <= `t_p24' & windex == 2
                 }
                 local n2 = r(N)
@@ -176,8 +188,9 @@ quietly {
                 frame weather_data {
                     count if port == "`p'" & weather_dt >= `t_m24' & weather_dt <= `t_p24' & windex == 4
                 }
-                local total_24 = `n2' * 0.50 + `n3' * 0.80 + r(N) * 1.00
-                replace openhourf_24_v2 = `total_24' in `i'
+                local n4 = r(N)
+                local v2_24 = `n1' * 0.28 + `n2' * 0.73 + `n3' * 0.87 + `n4' * 0.88
+                replace openhourf_24_v2 = `v2_24' in `i'
             }
         }
     }
@@ -196,6 +209,6 @@ count if weather_match_flag == 1
 display "Weather matched: " r(N)
 summarize openhourf_6_v1 openhourf_12_v1 openhourf_24_v1
 summarize openhourf_6_v2 openhourf_12_v2 openhourf_24_v2
-display "NOTE: v2 uses PROVISIONAL closure frequency values."
-display "      {1:1.0, 2:0.5, 3:0.2, 4:0.0}"
+display "NOTE: v2 uses Average closure freq from closure_frequency.csv"
+display "      See Python pipeline for port-specific v2 values."
 display "=== Stage 4 complete ==="

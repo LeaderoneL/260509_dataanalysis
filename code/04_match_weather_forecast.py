@@ -43,16 +43,34 @@ for port, grp in weather.groupby("port"):
 # ═══════════════════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════════════════
-# Version 2: open probability using closure frequency
-#   Since no closure frequency table was provided, we use provisional
-#   default values. THESE ARE PROVISIONAL AND MUST BE REPLACED.
+# Version 2: open probability using closure frequency from CSV
 # ═══════════════════════════════════════════════════════════════════
-CLOSURE_FREQ_PROVISIONAL = {
-    1: 1.00,   # Always closed
-    2: 0.50,   # Provisional
-    3: 0.20,   # Provisional
-    4: 0.00,   # Always open
+
+# Parse closure frequency CSV
+cf_raw = pd.read_csv(DATA_RAW / "closure_frequency.csv",
+                      skiprows=[0, 1, 6],
+                      names=["MIO", "Tiaozhoumen", "Xiushan East", "Xiazhimen", "Qushan", "Mazhi", "Average"])
+
+# Map CSV English column names to Chinese port names
+CSV_TO_PORT = {
+    "Tiaozhoumen": "条帚门",
+    "Xiushan East": "秀山东",
+    "Xiazhimen": "虾峙门",
+    "Qushan": "衢山",
+    "Mazhi": "马峙",
 }
+
+# Build port_closure_freq[port][index] = closure_frequency (0-1)
+CLOSURE_FREQ = {}
+for csv_col, port_name in CSV_TO_PORT.items():
+    row_map = {}
+    for _, row in cf_raw.iterrows():
+        idx = int(row["MIO"])
+        freq_str = str(row[csv_col]).replace("%", "")
+        row_map[idx] = float(freq_str) / 100.0
+    CLOSURE_FREQ[port_name] = row_map
+
+print(f"Loaded closure frequency for ports: {list(CLOSURE_FREQ.keys())}")
 
 # ═══════════════════════════════════════════════════════════════════
 # Precompute: for each unique port+datetime in transactions, find the
@@ -72,6 +90,9 @@ def compute_weather_windows(port, start_dt):
     dts, indices = weather_lookup[port]
     t_start = np.datetime64(start_dt)
 
+    # Get port-specific closure frequency
+    cf = CLOSURE_FREQ.get(port, {})
+
     results = {}
     for w in [6, 12, 24]:
         t_min = t_start - np.timedelta64(w, "h")
@@ -84,8 +105,8 @@ def compute_weather_windows(port, start_dt):
         # v1: binary open/closed
         v1_open = np.sum(matched_indices >= 2)
 
-        # v2: open probability sum
-        v2_open = sum(1 - CLOSURE_FREQ_PROVISIONAL.get(idx, 0) for idx in matched_indices)
+        # v2: open probability sum using port-specific closure frequency
+        v2_open = sum(1 - cf.get(idx, 0) for idx in matched_indices)
 
         results[f"v1_{w}"] = v1_open
         results[f"v2_{w}"] = round(v2_open, 1)
@@ -133,7 +154,7 @@ print(f"  openhourf_6_v1:  mean={matched['openhourf_6_v1'].mean():.1f}")
 print(f"  openhourf_12_v1: mean={matched['openhourf_12_v1'].mean():.1f}")
 print(f"  openhourf_24_v1: mean={matched['openhourf_24_v1'].mean():.1f}")
 
-print(f"\nVersion 2 (open probability, PROVISIONAL closure freq):")
+print(f"\nVersion 2 (open probability, port-specific closure freq):")
 print(f"  openhourf_6_v2:  mean={matched['openhourf_6_v2'].mean():.1f}")
 print(f"  openhourf_12_v2: mean={matched['openhourf_12_v2'].mean():.1f}")
 print(f"  openhourf_24_v2: mean={matched['openhourf_24_v2'].mean():.1f}")
@@ -143,6 +164,4 @@ print(f"  cov_6: mean={matched['weather_window_coverage_6'].mean():.1f}/13")
 print(f"  cov_12: mean={matched['weather_window_coverage_12'].mean():.1f}/25")
 print(f"  cov_24: mean={matched['weather_window_coverage_24'].mean():.1f}/49")
 
-print(f"\nNOTE: v2 variables use PROVISIONAL closure frequency values.")
-print(f"      Replace with actual closure frequency table before final delivery.")
-print(f"      Provisional values: {CLOSURE_FREQ_PROVISIONAL}")
+print(f"\nClosure frequency source: closure_frequency.csv (port-specific, Nov 2022 – Jul 2024)")

@@ -1,4 +1,4 @@
-# Processing Summary — 2026-05-16 20:46:25
+# Processing Summary — 2026-05-18 00:48:14
 
 ## Data Volume
 - Raw rows: 4422
@@ -32,13 +32,13 @@
 - v1 openhourf_6 mean: 9.7
 - v1 openhourf_12 mean: 18.6
 - v1 openhourf_24 mean: 36.4
-- v2 openhourf_6 mean (provisional): 7.7
-- v2 openhourf_12 mean (provisional): 14.7
-- v2 openhourf_24 mean (provisional): 28.8
+- v2 openhourf_6 mean: 8.3
+- v2 openhourf_12 mean: 16.0
+- v2 openhourf_24 mean: 31.3
 
-## Warnings
-- v2 closure frequency is PROVISIONAL: {1: 1.0, 2: 0.5, 3: 0.2, 4: 0.0}
-- Replace with actual closure frequency table before final delivery.
+## Closure Frequency Source
+- closure_frequency.csv: port-specific closure frequencies (Nov 2022 – Jul 2024)
+- v2 uses port-specific open probability = 1 - closure_frequency
 
 ## Log Files
 - unmatched_ports.xlsx
