@@ -1,0 +1,7 @@
+Table 1: Weather Forecast Accuracy in Zhoushan Anchorage
+MIO,Tiaozhoumen,Xiushan East,Xiazhimen,Qushan,Mazhi,Average
+1,80%,56%,78%,74%,63%,72%
+2,36%,16%,35%,28%,16%,27%
+3,19%,6%,19%,21%,9%,13%
+4,20%,6%,20%,10%,6%,12%
+Notes: Meteorological Index of Bonded Oil Bunker Supply Anchorage (MIO) ranges from 1 to 4, where 4 indicates the most favorable conditions and 1 the least favorable. This table shows the closure frequency across MIO for each anchorage at Zhoushan Port. The data span November 2022 to July 2024.

@@ -1,0 +1,343 @@
+
+  ___  ____  ____  ____  ____ ®
+ /__    /   ____/   /   ____/      StataNow 19.5
+___/   /   /___/   /   /___/       MP—Parallel Edition
+
+ Statistics and Data Science       Copyright 1985-2025 StataCorp LLC
+                                   StataCorp
+                                   4905 Lakeway Drive
+                                   College Station, Texas 77845 USA
+                                   800-782-8272        https://www.stata.com
+                                   979-696-4600        service@stata.com
+
+Stata license: Unlimited-user 2-core network, expiring  8 Apr 2027
+Serial number: 501909302397
+  Licensed to: Stuart
+               nju
+
+Notes:
+      1. Stata is running in batch mode.
+      2. Unicode is supported; see help unicode_advice.
+      3. More than 2 billion observations are allowed; see help obs_advice.
+      4. Maximum number of variables is set to 5,000 but can be increased;
+          see help set_maxvar.
+
+. do code/04_match_weather_forecast.do 
+
+. /* Stage 4: Match weather forecast data to transaction-level data.
+> 
+>    Input:
+>      data_intermediate/03_transaction_with_anchor.dta
+>      data_raw/气象预报.dta
+> 
+>    Output:
+>      data_intermediate/04_transaction_with_weather.dta
+> 
+>    For each transaction, compute:
+>      v1: MIO 1 = closed; MIO 2/3/4 = open
+>      v2: average open probability from closure_frequency.csv
+>          MIO 1 = 0.28, MIO 2 = 0.73, MIO 3 = 0.87, MIO 4 = 0.88
+> */
+. 
+. version 17
+
+. set more off
+
+. clear all
+
+. 
+. * ── Import transaction data with anchor results ─────────────────
+. use "data_intermediate/03_transaction_with_anchor.dta", clear
+
+. 
+. capture confirm string variable port
+
+. if _rc {
+.     tostring port, replace force
+. }
+
+. replace port = strtrim(port)
+(0 real changes made)
+
+. replace port = "" if port == "."
+(0 real changes made)
+
+. 
+. capture confirm numeric variable starthour
+
+. if _rc {
+.     destring starthour, replace force
+. }
+
+. 
+. capture confirm numeric variable startdate
+
+. if !_rc {
+.     gen str10 startdate_str = string(startdate, "%tdCCYY-NN-DD")
+. }
+
+. else {
+.     gen str10 startdate_str = startdate
+. }
+
+. 
+. gen double start_dt = clock(startdate_str + " " + string(starthour, "%02.0f")
+>  + ":00:00", "YMDhms")
+
+. format start_dt %tc
+
+. drop startdate_str
+
+. 
+. tempfile tx_all tx_match weather_data weather_open
+
+. save `tx_all', replace
+(file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88470.000001 not
+    found)
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88470.000001 saved
+    as .dta format
+
+. 
+. preserve
+
+.     keep transaction_id port start_dt
+
+.     drop if missing(port) | port == ""
+(31 observations deleted)
+
+.     drop if missing(start_dt)
+(0 observations deleted)
+
+. 
+.     expand 49
+(75,504 observations created)
+
+.     bysort transaction_id: gen offset = _n - 25
+
+.     gen double match_dt = start_dt + offset * 3600000
+
+.     format match_dt %tc
+
+.     gen match_date = dofc(match_dt)
+
+.     format match_date %td
+
+.     gen match_hour = hh(match_dt)
+
+. 
+.     gen byte in_6 = abs(offset) <= 6
+
+.     gen byte in_12 = abs(offset) <= 12
+
+.     gen byte in_24 = abs(offset) <= 24
+
+. 
+.     keep transaction_id port start_dt offset match_date match_hour in_*
+
+.     save `tx_match', replace
+(file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88470.000002 not
+    found)
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88470.000002 saved
+    as .dta format
+
+. restore
+
+. 
+. * ── Prepare date-hour-port weather data ─────────────────────────
+. use "data_raw/气象预报.dta", clear
+
+. capture confirm string variable port
+
+. if _rc {
+.     tostring port, replace force
+. }
+
+. replace port = strtrim(port)
+(0 real changes made)
+
+. 
+. capture rename 气象指数 windex
+
+. capture confirm numeric variable windex
+
+. if _rc {
+.     destring windex, replace force
+. }
+
+. 
+. gen byte open_v1 = inlist(windex, 2, 3, 4)
+
+. gen double open_v2 = .
+(71,976 missing values generated)
+
+. replace open_v2 = 0.28 if windex == 1
+(14,544 real changes made)
+
+. replace open_v2 = 0.73 if windex == 2
+(22,920 real changes made)
+
+. replace open_v2 = 0.87 if windex == 3
+(3,156 real changes made)
+
+. replace open_v2 = 0.88 if windex == 4
+(31,356 real changes made)
+
+. 
+. rename date_numeric match_date
+
+. rename hour match_hour
+
+. keep port match_date match_hour open_v1 open_v2
+
+. collapse (max) open_v1 (mean) open_v2, by(port match_date match_hour)
+
+. save `weather_data', replace
+(file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88470.000003 not
+    found)
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88470.000003 saved
+    as .dta format
+
+. 
+. * ── Merge fixed transaction windows and collapse window sums ─────
+. use `tx_match', clear
+
+. merge m:1 port match_date match_hour using `weather_data', keep(master match)
+
+    Result                      Number of obs
+    -----------------------------------------
+    Not matched                         8,320
+        from master                     8,320  (_merge==1)
+        from using                          0  (_merge==2)
+
+    Matched                            68,757  (_merge==3)
+    -----------------------------------------
+
+. 
+. foreach w in 6 12 24 {
+  2.     gen byte matched_in_`w' = (_merge == 3) & in_`w'
+  3.     replace open_v1 = 0 if missing(open_v1)
+  4.     replace open_v2 = 0 if missing(open_v2)
+  5.     gen double openf_v1_in_`w' = open_v1 * in_`w'
+  6.     gen double openf_v2_in_`w' = open_v2 * in_`w'
+  7.     gen byte cov_in_`w' = matched_in_`w'
+  8. }
+(8,320 real changes made)
+(8,320 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+
+. 
+. collapse ///
+>     (sum) openhourf_6_v1 = openf_v1_in_6 ///
+>           openhourf_12_v1 = openf_v1_in_12 ///
+>           openhourf_24_v1 = openf_v1_in_24 ///
+>           openhourf_6_v2 = openf_v2_in_6 ///
+>           openhourf_12_v2 = openf_v2_in_12 ///
+>           openhourf_24_v2 = openf_v2_in_24 ///
+>           weather_window_coverage_6 = cov_in_6 ///
+>           weather_window_coverage_12 = cov_in_12 ///
+>           weather_window_coverage_24 = cov_in_24, ///
+>     by(transaction_id)
+
+. 
+. gen byte weather_match_flag = weather_window_coverage_24 > 0
+
+. foreach w in 6 12 24 {
+  2.     replace openhourf_`w'_v1 = . if weather_window_coverage_`w' == 0
+  3.     replace openhourf_`w'_v2 = . if weather_window_coverage_`w' == 0
+  4. }
+(169 real changes made, 169 to missing)
+(169 real changes made, 169 to missing)
+(168 real changes made, 168 to missing)
+(168 real changes made, 168 to missing)
+(166 real changes made, 166 to missing)
+(166 real changes made, 166 to missing)
+
+. save `weather_open', replace
+(file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88470.000004 not
+    found)
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88470.000004 saved
+    as .dta format
+
+. 
+. * ── Merge back to all transactions ─────────────────────────────
+. use `tx_all', clear
+
+. merge 1:1 transaction_id using `weather_open', nogen
+
+    Result                      Number of obs
+    -----------------------------------------
+    Not matched                            31
+        from master                        31  
+        from using                          0  
+
+    Matched                             1,573  
+    -----------------------------------------
+
+. 
+. replace weather_match_flag = 0 if missing(weather_match_flag)
+(31 real changes made)
+
+. foreach v in weather_window_coverage_6 weather_window_coverage_12 weather_win
+> dow_coverage_24 {
+  2.     replace `v' = 0 if missing(`v')
+  3. }
+(31 real changes made)
+(31 real changes made)
+(31 real changes made)
+
+. 
+. drop start_dt
+
+. save "data_intermediate/04_transaction_with_weather.dta", replace
+file data_intermediate/04_transaction_with_weather.dta saved
+
+. 
+. display _n "=== Stage 4 Summary ==="
+
+=== Stage 4 Summary ===
+
+. count
+  1,604
+
+. display "Transactions retained: " r(N)
+Transactions retained: 1604
+
+. count if weather_match_flag == 1
+  1,407
+
+. display "Weather matched: " r(N)
+Weather matched: 1407
+
+. count if weather_match_flag == 0
+  197
+
+. display "Weather unmatched: " r(N)
+Weather unmatched: 197
+
+. summarize openhourf_6_v1 openhourf_12_v1 openhourf_24_v1
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v1 |      1,404    10.81339    4.364137          0         13
+openhou~2_v1 |      1,405    20.80142     7.47844          0         25
+openhou~4_v1 |      1,407    40.66667     12.4113          0         49
+
+. summarize openhourf_6_v2 openhourf_12_v2 openhourf_24_v2
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+openhou~6_v2 |      1,404    9.484095    2.536568        .28      11.44
+openhou~2_v2 |      1,405    18.23031    4.443727       1.76         22
+openhou~4_v2 |      1,407    35.64298    7.508276       5.32      43.12
+
+. display "NOTE: v2 uses Average closure frequency: 1=.72, 2=.27, 3=.13, 4=.12"
+NOTE: v2 uses Average closure frequency: 1=.72, 2=.27, 3=.13, 4=.12
+
+. display "=== Stage 4 complete ==="
+=== Stage 4 complete ===
+
+. 
+end of do-file

@@ -1,0 +1,299 @@
+
+  ___  ____  ____  ____  ____ ®
+ /__    /   ____/   /   ____/      StataNow 19.5
+___/   /   /___/   /   /___/       MP—Parallel Edition
+
+ Statistics and Data Science       Copyright 1985-2025 StataCorp LLC
+                                   StataCorp
+                                   4905 Lakeway Drive
+                                   College Station, Texas 77845 USA
+                                   800-782-8272        https://www.stata.com
+                                   979-696-4600        service@stata.com
+
+Stata license: Unlimited-user 2-core network, expiring  8 Apr 2027
+Serial number: 501909302397
+  Licensed to: Stuart
+               nju
+
+Notes:
+      1. Stata is running in batch mode.
+      2. Unicode is supported; see help unicode_advice.
+      3. More than 2 billion observations are allowed; see help obs_advice.
+      4. Maximum number of variables is set to 5,000 but can be increased;
+          see help set_maxvar.
+
+. do code/03_match_anchor_open.do 
+
+. /* Stage 3: Match anchor open data to transaction-level data.
+> 
+>    Input:
+>      data_intermediate/02_transaction_level_base.xlsx
+>      data_raw/锚地开放.dta
+> 
+>    Output:
+>      data_intermediate/03_transaction_with_anchor.dta
+> 
+>    For each transaction, compute openhour_6, openhour_12, openhour_24
+>    around the transaction start date-hour and keep all transaction rows.
+> */
+. 
+. version 17
+
+. set more off
+
+. clear all
+
+. 
+. * ── Import transaction-level base ──────────────────────────────
+. import excel using "data_intermediate/02_transaction_level_base.xlsx", firstr
+> ow clear
+(75 vars, 1,604 obs)
+
+. 
+. capture confirm string variable port
+
+. if _rc {
+.     tostring port, replace force
+. }
+
+. replace port = strtrim(port)
+(0 real changes made)
+
+. replace port = "" if port == "."
+(0 real changes made)
+
+. 
+. capture confirm numeric variable starthour
+
+. if _rc {
+.     destring starthour, replace force
+. }
+
+. 
+. capture confirm numeric variable startdate
+
+. if !_rc {
+.     gen str10 startdate_str = string(startdate, "%tdCCYY-NN-DD")
+. }
+
+. else {
+.     gen str10 startdate_str = startdate
+. }
+
+. gen double start_dt = clock(startdate_str + " " + string(starthour, "%02.0f")
+>  + ":00:00", "YMDhms")
+
+. format start_dt %tc
+
+. drop startdate_str
+
+. 
+. tempfile tx_all tx_match tx_expanded anchor_data hist_open
+
+. save `tx_all', replace
+(file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88469.000001 not
+    found)
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88469.000001 saved
+    as .dta format
+
+. 
+. preserve
+
+.     keep transaction_id port start_dt
+
+.     drop if missing(port) | port == ""
+(31 observations deleted)
+
+.     drop if missing(start_dt)
+(0 observations deleted)
+
+. 
+.     expand 49
+(75,504 observations created)
+
+.     bysort transaction_id: gen offset = _n - 25
+
+.     gen double match_dt = start_dt + offset * 3600000
+
+.     format match_dt %tc
+
+.     gen match_date = dofc(match_dt)
+
+.     format match_date %td
+
+.     gen match_hour = hh(match_dt)
+
+. 
+.     gen byte in_6 = abs(offset) <= 6
+
+.     gen byte in_12 = abs(offset) <= 12
+
+.     gen byte in_24 = abs(offset) <= 24
+
+. 
+.     keep transaction_id port start_dt offset match_date match_hour in_*
+
+.     save `tx_match', replace
+(file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88469.000002 not
+    found)
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88469.000002 saved
+    as .dta format
+
+. restore
+
+. 
+. * ── Prepare date-hour-port anchor open data ────────────────────
+. use "data_raw/锚地开放.dta", clear
+
+. capture confirm string variable port
+
+. if _rc {
+.     tostring port, replace force
+. }
+
+. replace port = strtrim(port)
+(0 real changes made)
+
+. 
+. gen double anchor_dt = dhms(date_numeric, hour, 0, 0)
+
+. format anchor_dt %tc
+
+. gen byte open_flag = (strupper(strtrim(status)) == "OPEN")
+
+. 
+. rename date_numeric match_date
+
+. rename hour match_hour
+
+. keep port match_date match_hour open_flag
+
+. collapse (max) open_flag, by(port match_date match_hour)
+
+. save `anchor_data', replace
+(file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88469.000004 not
+    found)
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88469.000004 saved
+    as .dta format
+
+. 
+. * ── Merge fixed transaction windows and collapse window sums ─────
+. use `tx_match', clear
+
+. merge m:1 port match_date match_hour using `anchor_data', keep(master match)
+
+    Result                      Number of obs
+    -----------------------------------------
+    Not matched                         6,370
+        from master                     6,370  (_merge==1)
+        from using                          0  (_merge==2)
+
+    Matched                            70,707  (_merge==3)
+    -----------------------------------------
+
+. 
+. foreach w in 6 12 24 {
+  2.     gen byte matched_in_`w' = (_merge == 3) & in_`w'
+  3.     replace open_flag = 0 if missing(open_flag)
+  4.     gen double open_in_`w' = open_flag * in_`w'
+  5.     gen byte cov_in_`w' = matched_in_`w'
+  6. }
+(6,370 real changes made)
+(0 real changes made)
+(0 real changes made)
+
+. 
+. collapse ///
+>     (sum) openhour_6 = open_in_6 ///
+>           openhour_12 = open_in_12 ///
+>           openhour_24 = open_in_24 ///
+>           anchor_window_coverage_6 = cov_in_6 ///
+>           anchor_window_coverage_12 = cov_in_12 ///
+>           anchor_window_coverage_24 = cov_in_24, ///
+>     by(transaction_id)
+
+. 
+. gen byte anchor_match_flag = anchor_window_coverage_24 > 0
+
+. foreach w in 6 12 24 {
+  2.     replace openhour_`w' = . if anchor_window_coverage_`w' == 0
+  3. }
+(130 real changes made, 130 to missing)
+(130 real changes made, 130 to missing)
+(130 real changes made, 130 to missing)
+
+. save `hist_open', replace
+(file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88469.000005 not
+    found)
+file /var/folders/pn/bh_wd1k132lg9xntnp92pg5r0000gn/T//St88469.000005 saved
+    as .dta format
+
+. 
+. * ── Merge back to all transactions ─────────────────────────────
+. use `tx_all', clear
+
+. merge 1:1 transaction_id using `hist_open', nogen
+
+    Result                      Number of obs
+    -----------------------------------------
+    Not matched                            31
+        from master                        31  
+        from using                          0  
+
+    Matched                             1,573  
+    -----------------------------------------
+
+. 
+. replace anchor_match_flag = 0 if missing(anchor_match_flag)
+(31 real changes made)
+
+. foreach v in anchor_window_coverage_6 anchor_window_coverage_12 anchor_window
+> _coverage_24 {
+  2.     replace `v' = 0 if missing(`v')
+  3. }
+(31 real changes made)
+(31 real changes made)
+(31 real changes made)
+
+. 
+. drop start_dt
+
+. save "data_intermediate/03_transaction_with_anchor.dta", replace
+file data_intermediate/03_transaction_with_anchor.dta saved
+
+. 
+. display _n "=== Stage 3 Summary ==="
+
+=== Stage 3 Summary ===
+
+. count
+  1,604
+
+. display "Transactions retained: " r(N)
+Transactions retained: 1604
+
+. count if anchor_match_flag == 1
+  1,443
+
+. display "Anchor matched: " r(N)
+Anchor matched: 1443
+
+. count if anchor_match_flag == 0
+  161
+
+. display "Anchor unmatched: " r(N)
+Anchor unmatched: 161
+
+. summarize openhour_6 openhour_12 openhour_24
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+  openhour_6 |      1,443     10.1185    4.835056          0         13
+ openhour_12 |      1,443    19.45807    8.526951          0         25
+ openhour_24 |      1,443    37.86764    14.51934          0         49
+
+. display "=== Stage 3 complete ==="
+=== Stage 3 complete ===
+
+. 
+end of do-file
