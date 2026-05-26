@@ -26,6 +26,9 @@ PORT_MAP = {
         "zhoushantideandberthwaitinganchorage",
         "zhoushantideandberth",
         "zhoushantideand",
+        "zhoushaneastanchorage",
+        "zhoushaneastanch",
+        "zhoushaneastancho",
     ],
     "马峙": [
         "zhoushanmashino1anchorage",
@@ -45,12 +48,18 @@ PORT_MAP = {
         "zhoushanxiazhimensou",
         "zhoushanxiazhimensout",
         "zhoushanxiazhimenso",
+        "zhoushanxiazhimesouth",
+        "zhoushanxiazhimens",
     ],
     "虾峙门": [
         "zhoushanxiazhimennorthanchorage",
         "zhoushanxiazhimennor",
         "zhoushanxiazhimennort",
         "zhoushanxiazhimenno",
+        "zhoushannorthanchorage",
+        "zhoushannorthanch",
+        "zhoushannorthanc",
+        "zhoushannorthanchorag",
     ],
     "衢山": [
         "zhoushanqushanbunkeringanchorage",
@@ -62,6 +71,7 @@ PORT_MAP = {
         "zhoushanqushanbunkerin",
         "zhoushanqushanancho",
         "zhoushanqushananchor",
+        "zhoushanqushanbun",
     ],
 }
 
@@ -130,7 +140,7 @@ raw["vessel_raw"] = raw.groupby("transaction_id")["vessel_raw"].transform(
 
 # ── Parse vessel info ──────────────────────────────────────────────
 vessel_pattern = re.compile(
-    r"^(.+?)\s*\((\d+)\)\s*[-–—]\s*(.+?),\s*(In Service/Commission|In Casualty or Repairing|Laid-Up|To Be Broken Up)"
+    r"^(.+?)\s*\((\d+)\)\s*[-–—]\s*(.+?),\s*(In Service/Commission|In Casualty or Repairing|Laid-Up|To Be Broken Up|Broken Up)"
     r"(?:,\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*dwt)?"
     r"(?:,\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*gt)?"
 )

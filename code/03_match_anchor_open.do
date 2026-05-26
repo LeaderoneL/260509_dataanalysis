@@ -1,137 +1,129 @@
 /* Stage 3: Match anchor open data to transaction-level data.
 
-   For each transaction, compute openhour_6, openhour_12, openhour_24
-   based on the anchor open status around the transaction start time.
+   Input:
+     data_intermediate/02_transaction_level_base.xlsx
+     data_raw/锚地开放.dta
 
-   Run: stata-mp < code/03_match_anchor_open.do
+   Output:
+     data_intermediate/03_transaction_with_anchor.dta
+
+   For each transaction, compute openhour_6, openhour_12, openhour_24
+   around the transaction start date-hour and keep all transaction rows.
 */
 
+version 17
 set more off
 clear all
 
 * ── Import transaction-level base ──────────────────────────────
-import excel using "data_intermediate/02_transaction_level_base.xlsx", sheet("Sheet1") firstrow clear
+import excel using "data_intermediate/02_transaction_level_base.xlsx", firstrow clear
 
-* Keep needed variables
-keep transaction_id port startdate starthour
-
-* Drop transactions with empty port
-drop if missing(port)
+capture confirm string variable port
+if _rc {
+    tostring port, replace force
+}
 replace port = strtrim(port)
-drop if port == ""
+replace port = "" if port == "."
 
-* Parse start datetime
-gen double start_dt = clock(startdate + " " + string(starthour, "%02.0f") + ":00:00", "YMDhms")
+capture confirm numeric variable starthour
+if _rc {
+    destring starthour, replace force
+}
+
+capture confirm numeric variable startdate
+if !_rc {
+    gen str10 startdate_str = string(startdate, "%tdCCYY-NN-DD")
+}
+else {
+    gen str10 startdate_str = startdate
+}
+gen double start_dt = clock(startdate_str + " " + string(starthour, "%02.0f") + ":00:00", "YMDhms")
 format start_dt %tc
+drop startdate_str
 
-* Save
-tempfile tx
-save `tx', replace
+tempfile tx_all tx_match tx_expanded anchor_data hist_open
+save `tx_all', replace
 
-* ── Load anchor open data ──────────────────────────────────────
+preserve
+    keep transaction_id port start_dt
+    drop if missing(port) | port == ""
+    drop if missing(start_dt)
+
+    expand 49
+    bysort transaction_id: gen offset = _n - 25
+    gen double match_dt = start_dt + offset * 3600000
+    format match_dt %tc
+    gen match_date = dofc(match_dt)
+    format match_date %td
+    gen match_hour = hh(match_dt)
+
+    gen byte in_6 = abs(offset) <= 6
+    gen byte in_12 = abs(offset) <= 12
+    gen byte in_24 = abs(offset) <= 24
+
+    keep transaction_id port start_dt offset match_date match_hour in_*
+    save `tx_match', replace
+restore
+
+* ── Prepare date-hour-port anchor open data ────────────────────
 use "data_raw/锚地开放.dta", clear
-
-* Ensure port is string and trimmed
-tostring port, replace force
+capture confirm string variable port
+if _rc {
+    tostring port, replace force
+}
 replace port = strtrim(port)
 
-* Create datetime for anchor records
-gen double anchor_dt = clock(string(date_numeric, "%tdCCYY-NN-DD") + " " + string(hour, "%02.0f") + ":00:00", "YMDhms")
+gen double anchor_dt = dhms(date_numeric, hour, 0, 0)
 format anchor_dt %tc
+gen byte open_flag = (strupper(strtrim(status)) == "OPEN")
 
-* Open flag
-gen byte open_flag = (strupper(status) == "OPEN")
+rename date_numeric match_date
+rename hour match_hour
+keep port match_date match_hour open_flag
+collapse (max) open_flag, by(port match_date match_hour)
+save `anchor_data', replace
 
-keep port anchor_dt open_flag
+* ── Merge fixed transaction windows and collapse window sums ─────
+use `tx_match', clear
+merge m:1 port match_date match_hour using `anchor_data', keep(master match)
 
-* Index for faster lookups
-sort port anchor_dt
-save `tx', replace
+foreach w in 6 12 24 {
+    gen byte matched_in_`w' = (_merge == 3) & in_`w'
+    replace open_flag = 0 if missing(open_flag)
+    gen double open_in_`w' = open_flag * in_`w'
+    gen byte cov_in_`w' = matched_in_`w'
+}
 
-* ── Match using frame-based lookup ─────────────────────────────
-use `tx', clear
+collapse ///
+    (sum) openhour_6 = open_in_6 ///
+          openhour_12 = open_in_12 ///
+          openhour_24 = open_in_24 ///
+          anchor_window_coverage_6 = cov_in_6 ///
+          anchor_window_coverage_12 = cov_in_12 ///
+          anchor_window_coverage_24 = cov_in_24, ///
+    by(transaction_id)
 
-gen openhour_6 = .
-gen openhour_12 = .
-gen openhour_24 = .
-gen anchor_match_flag = 0
-gen anchor_window_coverage_6 = 0
-gen anchor_window_coverage_12 = 0
-gen anchor_window_coverage_24 = 0
+gen byte anchor_match_flag = anchor_window_coverage_24 > 0
+foreach w in 6 12 24 {
+    replace openhour_`w' = . if anchor_window_coverage_`w' == 0
+}
+save `hist_open', replace
 
-* Create a frame with anchor data
-frame create anchor_data
-frame anchor_data: use `tx', clear
+* ── Merge back to all transactions ─────────────────────────────
+use `tx_all', clear
+merge 1:1 transaction_id using `hist_open', nogen
 
-* Process each transaction
-quietly {
-    count
-    local N = r(N)
-
-    forvalues i = 1/`N' {
-        local p = port[`i']
-        local t = start_dt[`i']
-
-        * Window boundaries (ms)
-        local t_m6  = `t' -  6 * 3600000
-        local t_p6  = `t' +  6 * 3600000
-        local t_m12 = `t' - 12 * 3600000
-        local t_p12 = `t' + 12 * 3600000
-        local t_m24 = `t' - 24 * 3600000
-        local t_p24 = `t' + 24 * 3600000
-
-        * Check if port exists in anchor data
-        frame anchor_data {
-            count if port == "`p'"
-        }
-        if r(N) > 0 {
-            replace anchor_match_flag = 1 in `i'
-
-            * Window 6
-            frame anchor_data {
-                count if port == "`p'" & anchor_dt >= `t_m6' & anchor_dt <= `t_p6'
-            }
-            local tot6 = r(N)
-            frame anchor_data {
-                count if port == "`p'" & anchor_dt >= `t_m6' & anchor_dt <= `t_p6' & open_flag == 1
-            }
-            replace openhour_6 = r(N) in `i'
-            replace anchor_window_coverage_6 = `tot6' in `i'
-
-            * Window 12
-            frame anchor_data {
-                count if port == "`p'" & anchor_dt >= `t_m12' & anchor_dt <= `t_p12'
-            }
-            local tot12 = r(N)
-            frame anchor_data {
-                count if port == "`p'" & anchor_dt >= `t_m12' & anchor_dt <= `t_p12' & open_flag == 1
-            }
-            replace openhour_12 = r(N) in `i'
-            replace anchor_window_coverage_12 = `tot12' in `i'
-
-            * Window 24
-            frame anchor_data {
-                count if port == "`p'" & anchor_dt >= `t_m24' & anchor_dt <= `t_p24'
-            }
-            local tot24 = r(N)
-            frame anchor_data {
-                count if port == "`p'" & anchor_dt >= `t_m24' & anchor_dt <= `t_p24' & open_flag == 1
-            }
-            replace openhour_24 = r(N) in `i'
-            replace anchor_window_coverage_24 = `tot24' in `i'
-        }
-    }
+replace anchor_match_flag = 0 if missing(anchor_match_flag)
+foreach v in anchor_window_coverage_6 anchor_window_coverage_12 anchor_window_coverage_24 {
+    replace `v' = 0 if missing(`v')
 }
 
 drop start_dt
-
-* ── Save ───────────────────────────────────────────────────────
 save "data_intermediate/03_transaction_with_anchor.dta", replace
 
-* ── Summary ────────────────────────────────────────────────────
 display _n "=== Stage 3 Summary ==="
 count
-display "Transactions processed: " r(N)
+display "Transactions retained: " r(N)
 count if anchor_match_flag == 1
 display "Anchor matched: " r(N)
 count if anchor_match_flag == 0

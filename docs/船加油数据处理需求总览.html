@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>船加油数据处理需求总览与执行步骤</title>
+  <style>
+    :root {
+      --ink: #17202a;
+      --muted: #5f6b7a;
+      --line: #d8dee8;
+      --soft: #f5f7fb;
+      --accent: #0f766e;
+      --accent-soft: #e6f5f2;
+      --warn: #8a5a00;
+      --warn-soft: #fff5d7;
+      --code: #101827;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+      color: var(--ink);
+      background: #ffffff;
+      line-height: 1.65;
+    }
+
+    header {
+      padding: 42px 28px 28px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    h1 {
+      max-width: 1120px;
+      margin: 0 auto 10px;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 1120px;
+      margin: 0 auto;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    nav {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 18px 28px 0;
+    }
+
+    nav ul {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+    }
+
+    nav a {
+      display: inline-block;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--ink);
+      text-decoration: none;
+      background: #ffffff;
+      font-size: 14px;
+    }
+
+    section {
+      margin: 0 0 34px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+      color: #0f3b68;
+      background: #eef4fb;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    pre {
+      margin: 14px 0;
+      padding: 16px;
+      border-radius: 8px;
+      overflow: auto;
+      color: #eef4ff;
+      background: var(--code);
+      line-height: 1.48;
+      border: 1px solid #263244;
+    }
+
+    pre code {
+      color: inherit;
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+      font-size: 13px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 18px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      vertical-align: top;
+      text-align: left;
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+    }
+
+    th {
+      background: var(--soft);
+      font-weight: 700;
+    }
+
+    ul,
+    ol {
+      margin-top: 8px;
+      padding-left: 24px;
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    .note,
+    .assumption,
+    .warning {
+      border: 1px solid var(--line);
+      border-left-width: 5px;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin: 14px 0;
+      background: var(--soft);
+    }
+
+    .note {
+      border-left-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .assumption {
+      border-left-color: #3b63c6;
+      background: #eef3ff;
+    }
+
+    .warning {
+      border-left-color: var(--warn);
+      background: var(--warn-soft);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #ffffff;
+    }
+
+    .card h3 {
+      margin-top: 0;
+    }
+
+    .tag {
+      display: inline-block;
+      margin: 2px 4px 2px 0;
+      padding: 2px 7px;
+      border-radius: 999px;
+      color: #0f3b35;
+      background: #dff3ed;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media print {
+      nav {
+        display: none;
+      }
+
+      body {
+        background: #ffffff;
+      }
+
+      header,
+      main {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+
+      pre {
+        white-space: pre-wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>船加油数据处理需求总览与执行步骤</h1>
+    <p class="subtitle">
+      基于当前工作目录内的 <code>船加油数据处理思路.pdf</code>、用户补充需求、<code>Bunkering Record v3.xlsx</code>、<code>锚地开放.dta</code>、<code>气象预报.dta</code> 与 <code>closure_frequency.csv</code> 整理。本文档不依赖目录外文件。
+    </p>
+  </header>
+
+  <nav aria-label="目录">
+    <ul>
+      <li><a href="#goal">目标</a></li>
+      <li><a href="#inputs">输入文件</a></li>
+      <li><a href="#output">目标数据结构</a></li>
+      <li><a href="#rules">核心规则</a></li>
+      <li><a href="#python">Python 步骤</a></li>
+      <li><a href="#stata">Stata 步骤</a></li>
+      <li><a href="#qa">审查清单</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="goal">
+      <h2>1. 项目目标</h2>
+      <p>
+        该项目的目标是把船舶加油原始记录从多行事件表整理为 <strong>transaction level</strong> 数据：每一行代表一次加油交易，保留船舶信息、整段过程时间、每一次 STS 加油事件、supplier、加油港口、吃水变化等字段。随后，以每笔交易的 <code>startdate</code>、<code>starthour</code> 和 <code>port</code> 为锚点，在 Stata 中匹配小时级锚地开放状态与气象预报指数，生成交易层面的历史开放时长与预测开放时长。
+      </p>
+      <div class="note">
+        <strong>执行分工：</strong>交易记录清洗、字段解析、模糊港口匹配、多 STS 展开、去重和质检用 Python 完成；锚地开放与气象预报的前后窗口匹配用 Stata 完成。
+      </div>
+    </section>
+
+    <section id="inputs">
+      <h2>2. 输入文件与已识别结构</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>文件</th>
+            <th>用途</th>
+            <th>已识别字段/结构</th>
+            <th>处理职责</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Bunkering Record v3.xlsx</code></td>
+            <td>船舶加油原始记录，交易由多行组成。</td>
+            <td>
+              主要字段包括 vessel 信息、<code>Operations</code>、<code>Location</code>、<code>Country or Region</code>、<code>Start</code>、<code>End</code>、<code>Duration</code>、<code>± Draught</code>、<code>Location Details</code>。部分 sheet 有 <code>transaction_id</code>，部分原始 sheet 需要按非空 vessel 行生成交易编号。
+            </td>
+            <td>Python</td>
+          </tr>
+          <tr>
+            <td><code>船加油数据处理思路.pdf</code></td>
+            <td>原始处理需求说明。</td>
+            <td>
+              明确了交易层级、vessel 信息提取、STS 与 Anchorage 区分、时间字段、duration、Draught、supplier、port 对照表、duplicate 删除和结果核对要求。
+            </td>
+            <td>需求来源</td>
+          </tr>
+          <tr>
+            <td><code>锚地开放.dta</code></td>
+            <td>小时级锚地开放状态。</td>
+            <td><code>port</code>、<code>hour</code>、<code>status</code>、<code>original_reason</code>、<code>date_numeric</code>；样本结构为 date-hour-port。</td>
+            <td>Stata</td>
+          </tr>
+          <tr>
+            <td><code>气象预报.dta</code></td>
+            <td>小时级预报气象指数。</td>
+            <td><code>port</code>、<code>气象指数</code>、<code>hour</code>、<code>date_numeric</code>；气象指数为 1、2、3、4，4 最好，1 最差。</td>
+            <td>Stata</td>
+          </tr>
+          <tr>
+            <td><code>closure_frequency.csv</code></td>
+            <td>气象指数对应的关闭频率。</td>
+            <td>
+              Average 关闭频率：MIO=1 为 72%，MIO=2 为 27%，MIO=3 为 13%，MIO=4 为 12%。开放概率为 <code>1 - closure frequency</code>。
+            </td>
+            <td>Stata 规则来源</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="output">
+      <h2>3. 目标交易层数据结构</h2>
+      <p>
+        Python 阶段建议输出 <code>outputs/transactions_clean.xlsx</code>，并额外输出可审查的长表与问题样本表，例如 <code>outputs/sts_episode_long.xlsx</code>、<code>outputs/unmatched_ports.xlsx</code>、<code>outputs/port_conflicts.xlsx</code>。核心交易层字段如下。
+      </p>
+
+      <h3>3.1 船舶与交易标识字段</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>含义</th>
+            <th>生成规则</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>transaction_id</code></td>
+            <td>交易唯一编号。</td>
+            <td>若源 sheet 已有则沿用；否则按非空 vessel 行累积生成。</td>
+          </tr>
+          <tr>
+            <td><code>vessel_name</code>、<code>imo</code>、<code>vessel_type</code>、<code>service_status</code>、<code>dwt</code>、<code>gt</code></td>
+            <td>船舶基础信息。</td>
+            <td>从 vessel 字符串中解析，例如 <code>JOLLY ARGENTO (9467043) - Container Ship, In Service/Commission, 62510 dwt, 47789gt</code>。</td>
+          </tr>
+          <tr>
+            <td><code>draught_numeric</code></td>
+            <td>吃水变化数值。</td>
+            <td>从 <code>± Draught</code> 中提取数值，例如 <code>+0.1 m</code> 转为 <code>0.1</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3.2 整段过程时间字段</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>含义</th>
+            <th>口径</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>startdate</code>、<code>starthour</code></td>
+            <td>该 transaction 整个过程的开始日期与小时。</td>
+            <td>取该交易所有事件 <code>Start</code> 的最早值，按四舍五入到小时后再拆分日期和小时。</td>
+          </tr>
+          <tr>
+            <td><code>enddate</code>、<code>endhour</code></td>
+            <td>该 transaction 整个过程的结束日期与小时。</td>
+            <td>取该交易所有事件 <code>End</code> 的最晚值，按四舍五入到小时后再拆分日期和小时。</td>
+          </tr>
+          <tr>
+            <td><code>duration</code></td>
+            <td>整个过程时长，单位小时。</td>
+            <td>用最晚原始 <code>End</code> 减最早原始 <code>Start</code>，以小时为单位四舍五入。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3.3 多 STS 与 supplier 字段</h3>
+      <p>
+        每笔 transaction 可能出现多个 supplier，或同一 supplier 出现多条 STS。处理时必须把每一次 STS 按时间顺序拆开记录。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>字段模式</th>
+            <th>含义</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>start_STS1</code>、<code>end_STS1</code>、<code>duration_STS1</code></td>
+            <td>第 1 次 STS 的开始、结束与时长。</td>
+            <td>按 STS 开始时间排序。<code>start_STS*</code> 与 <code>end_STS*</code> 建议存完整四舍五入后 datetime；<code>duration_STS*</code> 用原始起止时间差四舍五入到小时。</td>
+          </tr>
+          <tr>
+            <td><code>start_STS2</code>、<code>end_STS2</code>、<code>duration_STS2</code>，依此类推</td>
+            <td>后续 STS 事件。</td>
+            <td>最大编号由全样本中一笔交易的最大 STS 条数决定。</td>
+          </tr>
+          <tr>
+            <td><code>supplier1</code>、<code>supplier2</code>，依此类推</td>
+            <td>每次 STS 对应的 supplier。</td>
+            <td>从 STS 行的 <code>Location Details</code> 提取，例如 <code>With Fu Jie 168</code> 转为 <code>Fu Jie 168</code>。若同一个 supplier 有多条 STS，则多个 supplier 字段可以相同。</td>
+          </tr>
+          <tr>
+            <td><code>supplier_n</code></td>
+            <td>该 transaction 中 STS/supplier 记录数。</td>
+            <td>按 STS episode 计数，不按唯一 supplier 去重；如同一 supplier 出现两条 STS，则 <code>supplier_n = 2</code>。</td>
+          </tr>
+          <tr>
+            <td><code>duration_STS</code></td>
+            <td>总加油时长，单位小时。</td>
+            <td>等于 <code>duration_STS1 + duration_STS2 + ...</code>。</td>
+          </tr>
+          <tr>
+            <td><code>end_STS_final</code>、<code>endhour_STS_final</code></td>
+            <td>最后一个 supplier/STSes 加油结束日期与小时。</td>
+            <td>取最后一条 STS 的 <code>End</code>，按小时四舍五入后拆分日期与小时。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="assumption">
+        <strong>待审查口径：</strong><code>supplier_n</code> 在本文档中定义为 STS episode/supplier 记录数，而不是唯一 supplier 数。若后续研究需要唯一 supplier 数，可额外生成 <code>supplier_unique_n</code> 作为辅助变量。
+      </div>
+    </section>
+
+    <section id="rules">
+      <h2>4. 核心处理规则</h2>
+
+      <h3>4.1 Operations 识别</h3>
+      <ul>
+        <li><code>Operations</code> 包含 <code>STS - Bunkering</code> 的行视为加油事件。</li>
+        <li><code>Operations</code> 包含 <code>Anchorage</code> 的行视为排队等待或锚地相关事件。</li>
+        <li>一笔 transaction 可以同时包含多条 Anchorage 和多条 STS。</li>
+      </ul>
+
+      <h3>4.2 时间四舍五入规则</h3>
+      <p>
+        所有需要落到小时的时间，都先对完整 datetime 四舍五入，再拆分日期和小时。关键是处理跨日情形：<code>2024/1/5 23:42</code> 应转为 <code>2024/1/6 00:00</code>，而不是 <code>2024/1/5 00:00</code>。
+      </p>
+      <pre><code>def round_to_hour(dt):
+    # 先给完整 datetime 加 30 分钟，再 floor 到小时。
+    # 这样 23:42 会自然进入下一天 00:00。
+    return (dt + pd.Timedelta(minutes=30)).floor("h")</code></pre>
+
+      <h3>4.3 港口识别与模糊匹配</h3>
+      <p>
+        只有出现在对照表中的港口才视为加油港口。若同一交易下所有 <code>Location Details</code> 均无法匹配到对照港口，则 <code>port</code> 留空，后续可删除或单独复核。若同一交易中有多个描述，其中一个可匹配、另一个不可匹配，则保留可匹配港口。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>英文/模糊名称</th>
+            <th>输出 <code>port</code></th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Zhoushan Tide and Berth Waiting Anchorage</code>、<code>Zhoushan East Anchorage</code>、<code>Xiushan East等</code></td>
+            <td>秀山东</td>
+            <td>PDF 中对应 Xiushan East；Excel 样本中也出现 East Anchorage。</td>
+          </tr>
+          <tr>
+            <td><code>Zhoushan Mashi Anchorage</code>、<code>No1/No2/Dangerous Goods</code>、<code>Mazhi等</code></td>
+            <td>马峙</td>
+            <td>包括马峙锚地相关变体。</td>
+          </tr>
+          <tr>
+            <td><code>Zhoushan Xiazhimen South Anchorage</code>、<code>Xiazhimen So</code>、<code>Xiazhimen Sou</code>、<code>Xiazhimen South等</code></td>
+            <td>条帚门</td>
+            <td>用户明确指出 <code>At Zhoushan Xiazhimen Sou</code> 应识别为 <code>Zhoushan Xiazhimen South Anchorage</code>。</td>
+          </tr>
+          <tr>
+            <td><code>Zhoushan Xiazhimen North Anchorage</code>、<code>Xiazhimen North等</code></td>
+            <td>虾峙门</td>
+            <td>北锚地。</td>
+          </tr>
+          <tr>
+            <td><code>Zhoushan Qushan Bunkering Anchorage</code>、<code>Qushan等</code></td>
+            <td>衢山</td>
+            <td>与 <code>锚地开放.dta</code>、<code>气象预报.dta</code> 中的中文港口名保持一致。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="warning">
+        <strong>冲突处理建议：</strong>若同一 transaction 匹配出多个不同的对照港口，应保留一个确定性结果并生成 <code>port_conflict_flag = 1</code> 供人工复核。建议默认取交易内最早出现的可匹配港口，或优先取与 STS 最近的 Anchorage 港口；该口径应在正式跑数前确认。
+      </div>
+
+      <h3>4.4 去重与核对</h3>
+      <ul>
+        <li>删除重复交易记录前，应先保留 <code>duplicate_flag</code> 与去重 key，便于审查。</li>
+        <li>推荐去重 key：<code>imo</code>、交易起止时间、<code>port</code>、STS 起止序列、supplier 序列。</li>
+        <li>最终必须比对原始数据：交易数量、STS 行数、supplier 提取数、匹配到 port 的交易数、未匹配 port 样本。</li>
+      </ul>
+    </section>
+
+    <section id="python">
+      <h2>5. Python 可执行步骤</h2>
+      <p>
+        Python 阶段的目标是把 Excel 多行事件数据整理成交易层主表，并生成复核用长表。建议脚本命名为 <code>scripts/process_transactions.py</code>，输出均写入工作目录下的 <code>outputs/</code>。
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>步骤</th>
+            <th>输入</th>
+            <th>动作</th>
+            <th>输出/审查点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>P0. 建立目录与配置</td>
+            <td>工作目录</td>
+            <td>设置输入文件名、源 sheet 名、输出目录、港口对照正则。</td>
+            <td><code>outputs/</code> 存在；日志记录脚本配置。</td>
+          </tr>
+          <tr>
+            <td>P1. 读取并标准化 Excel</td>
+            <td><code>Bunkering Record v3.xlsx</code></td>
+            <td>定位表头行，统一列名，丢弃完全空行。</td>
+            <td>输出原始有效行数、识别出的列名。</td>
+          </tr>
+          <tr>
+            <td>P2. 交易编号与 vessel 填充</td>
+            <td>标准化事件表</td>
+            <td>若有 <code>transaction_id</code> 则沿用；否则以非空 vessel 行为新交易起点生成编号。对交易内空白 vessel 向下填充。</td>
+            <td>每行均有 <code>transaction_id</code> 与 vessel 字符串。</td>
+          </tr>
+          <tr>
+            <td>P3. 解析船舶字段</td>
+            <td>vessel 字符串</td>
+            <td>提取船名、IMO、类型、服务状态、DWT、GT。</td>
+            <td>输出解析失败样本，避免静默丢失。</td>
+          </tr>
+          <tr>
+            <td>P4. 时间与 duration</td>
+            <td><code>Start</code>、<code>End</code></td>
+            <td>解析混合日期格式；计算交易最早开始、最晚结束；按完整 datetime 四舍五入到小时；计算 <code>duration</code>。</td>
+            <td>重点检查跨日四舍五入，例如 23:42 到次日 00:00。</td>
+          </tr>
+          <tr>
+            <td>P5. 识别 STS episode 与 supplier</td>
+            <td><code>Operations</code>、<code>Location Details</code></td>
+            <td>筛选 STS 行，按开始时间排序，提取 supplier，生成长表并展开为 <code>supplier1</code>、<code>start_STS1</code> 等宽表字段。</td>
+            <td><code>sts_episode_long.xlsx</code>；核对 STS 行数与 <code>supplier_n</code> 总和。</td>
+          </tr>
+          <tr>
+            <td>P6. 港口匹配</td>
+            <td>交易内所有 <code>Location Details</code></td>
+            <td>用对照表和模糊规则匹配港口。无匹配则 <code>port</code> 留空；多匹配冲突则标记。</td>
+            <td><code>unmatched_ports.xlsx</code>、<code>port_conflicts.xlsx</code>。</td>
+          </tr>
+          <tr>
+            <td>P7. 去重与交易层合并</td>
+            <td>交易层字段、STS 宽表、港口字段</td>
+            <td>按去重 key 删除重复记录，保留去重日志。</td>
+            <td><code>transactions_clean.xlsx</code>。</td>
+          </tr>
+          <tr>
+            <td>P8. 质量检查</td>
+            <td>原始事件表、交易层输出</td>
+            <td>生成行数、交易数、STS 数、supplier 数、port 匹配率、缺失率报告。</td>
+            <td><code>qa_summary.xlsx</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Python 代码框架</h3>
+      <pre><code>from pathlib import Path
+import re
+import pandas as pd
+import numpy as np
+
+ROOT = Path(".")
+INPUT_XLSX = ROOT / "Bunkering Record v3.xlsx"
+OUT = ROOT / "outputs"
+OUT.mkdir(exist_ok=True)
+
+SOURCE_SHEET = "Bunkering Raw Data V2"  # 如正式使用 Sheet1，可改为 "Sheet1"
+
+PORT_PATTERNS = [
+    (re.compile(r"(tide and berth waiting|xiushan east|east anchorage)", re.I), "秀山东"),
+    (re.compile(r"(mashi|ma\s*shi|mazhi|dangerous goods|no1|no2)", re.I), "马峙"),
+    (re.compile(r"(xiazhimen\s*(south|so|sou)|xiazhimen south)", re.I), "条帚门"),
+    (re.compile(r"(xiazhimen\s*north|xiazhimen north)", re.I), "虾峙门"),
+    (re.compile(r"(qushan)", re.I), "衢山"),
+]
+
+def round_to_hour(dt):
+    if pd.isna(dt):
+        return pd.NaT
+    return (dt + pd.Timedelta(minutes=30)).floor("h")
+
+def parse_datetime_series(s):
+    # pandas 可同时处理 Excel datetime 与常见英文日期字符串；无法解析的值保留 NaT 并进入 QA。
+    return pd.to_datetime(s, errors="coerce")
+
+def parse_vessel(v):
+    text = "" if pd.isna(v) else str(v).strip()
+    pattern = re.compile(
+        r"^(?P&lt;name&gt;.*?)\s*\((?P&lt;imo&gt;\d+)\)\s*-\s*"
+        r"(?P&lt;type&gt;.*?),\s*(?P&lt;status&gt;.*?),\s*"
+        r"(?P&lt;dwt&gt;[\d,]+)\s*dwt,\s*(?P&lt;gt&gt;[\d,]+)\s*gt",
+        re.I
+    )
+    m = pattern.search(text)
+    if not m:
+        return pd.Series({
+            "vessel_name": np.nan, "imo": np.nan, "vessel_type": np.nan,
+            "service_status": np.nan, "dwt": np.nan, "gt": np.nan
+        })
+    d = m.groupdict()
+    return pd.Series({
+        "vessel_name": d["name"].strip(),
+        "imo": d["imo"],
+        "vessel_type": d["type"].strip(),
+        "service_status": d["status"].strip(),
+        "dwt": int(d["dwt"].replace(",", "")),
+        "gt": int(d["gt"].replace(",", "")),
+    })
+
+def extract_supplier(location_details):
+    text = "" if pd.isna(location_details) else str(location_details).strip()
+    text = re.sub(r"^\s*with\s+", "", text, flags=re.I)
+    return text.strip() or np.nan
+
+def match_port_one(text):
+    if pd.isna(text):
+        return None
+    text = str(text)
+    for pattern, port in PORT_PATTERNS:
+        if pattern.search(text):
+            return port
+    return None
+
+def choose_transaction_port(details):
+    matched = [p for p in (match_port_one(x) for x in details.dropna()) if p]
+    unique = list(dict.fromkeys(matched))
+    if not unique:
+        return pd.Series({"port": np.nan, "port_conflict_flag": 0})
+    return pd.Series({"port": unique[0], "port_conflict_flag": int(len(unique) &gt; 1)})
+
+def locate_and_read_events(path, sheet_name):
+    raw = pd.read_excel(path, sheet_name=sheet_name, header=None)
+    header_row = None
+    for i, row in raw.iterrows():
+        vals = row.astype(str).str.lower().tolist()
+        if any("operations" in v for v in vals) and any("location details" in v for v in vals):
+            header_row = i
+            break
+    if header_row is None:
+        # 对类似 Sheet1 的结构，首行已经近似是表头；正式脚本应在这里加入 sheet-specific 兜底映射。
+        raise ValueError("未找到包含 Operations 与 Location Details 的表头行")
+
+    df = pd.read_excel(path, sheet_name=sheet_name, header=header_row)
+    df = df.dropna(how="all").copy()
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
+
+events = locate_and_read_events(INPUT_XLSX, SOURCE_SHEET)
+
+# 统一列名：正式脚本应根据实际 sheet 增补映射。
+rename_map = {
+    events.columns[0]: "vessel_raw",
+    "Operations": "operation",
+    "Start": "start_raw",
+    "End": "end_raw",
+    "Duration": "duration_raw",
+    "± Draught": "draught_raw",
+    "Location Details": "location_details",
+}
+events = events.rename(columns={k: v for k, v in rename_map.items() if k in events.columns})
+
+if "transaction_id" not in events.columns:
+    new_tx = events["vessel_raw"].notna()
+    events["transaction_id"] = new_tx.cumsum()
+
+events["vessel_raw"] = events["vessel_raw"].ffill()
+events[["vessel_name", "imo", "vessel_type", "service_status", "dwt", "gt"]] = events["vessel_raw"].apply(parse_vessel)
+events["start_dt"] = parse_datetime_series(events["start_raw"])
+events["end_dt"] = parse_datetime_series(events["end_raw"])
+events["draught_numeric"] = (
+    events["draught_raw"].astype(str).str.extract(r"([+-]?\d+(?:\.\d+)?)", expand=False).astype(float)
+)
+
+# 交易层基本时间。
+tx_time = events.groupby("transaction_id").agg(
+    start_dt=("start_dt", "min"),
+    end_dt=("end_dt", "max"),
+).reset_index()
+tx_time["start_round"] = tx_time["start_dt"].apply(round_to_hour)
+tx_time["end_round"] = tx_time["end_dt"].apply(round_to_hour)
+tx_time["startdate"] = tx_time["start_round"].dt.strftime("%Y-%m-%d")
+tx_time["starthour"] = tx_time["start_round"].dt.hour
+tx_time["enddate"] = tx_time["end_round"].dt.strftime("%Y-%m-%d")
+tx_time["endhour"] = tx_time["end_round"].dt.hour
+tx_time["duration"] = ((tx_time["end_dt"] - tx_time["start_dt"]) / pd.Timedelta(hours=1)).round().astype("Int64")
+
+# 港口。
+tx_port = (
+    events.groupby("transaction_id", group_keys=False)
+    .apply(lambda g: choose_transaction_port(g["location_details"]))
+    .reset_index()
+)
+
+# STS 长表与宽表。
+sts = events[events["operation"].astype(str).str.contains("STS", case=False, na=False)].copy()
+sts = sts.sort_values(["transaction_id", "start_dt", "end_dt"])
+sts["sts_no"] = sts.groupby("transaction_id").cumcount() + 1
+sts["supplier"] = sts["location_details"].apply(extract_supplier)
+sts["start_STS"] = sts["start_dt"].apply(round_to_hour)
+sts["end_STS"] = sts["end_dt"].apply(round_to_hour)
+sts["duration_STS_i"] = ((sts["end_dt"] - sts["start_dt"]) / pd.Timedelta(hours=1)).round().astype("Int64")
+sts.to_excel(OUT / "sts_episode_long.xlsx", index=False, sheet_name="sts_episode_long")
+
+wide_parts = []
+for value_col, prefix in [
+    ("supplier", "supplier"),
+    ("start_STS", "start_STS"),
+    ("end_STS", "end_STS"),
+    ("duration_STS_i", "duration_STS"),
+]:
+    w = sts.pivot(index="transaction_id", columns="sts_no", values=value_col)
+    w.columns = [f"{prefix}{int(c)}" for c in w.columns]
+    wide_parts.append(w)
+sts_wide = pd.concat(wide_parts, axis=1).reset_index()
+
+sts_summary = sts.groupby("transaction_id").agg(
+    supplier_n=("sts_no", "max"),
+    duration_STS=("duration_STS_i", "sum"),
+    final_end_dt=("end_dt", "max"),
+).reset_index()
+sts_summary["final_end_round"] = sts_summary["final_end_dt"].apply(round_to_hour)
+sts_summary["end_STS_final"] = sts_summary["final_end_round"].dt.strftime("%Y-%m-%d")
+sts_summary["endhour_STS_final"] = sts_summary["final_end_round"].dt.hour
+sts_summary = sts_summary.drop(columns=["final_end_dt", "final_end_round"])
+
+# 交易层船舶字段。
+vessel_cols = ["transaction_id", "vessel_name", "imo", "vessel_type", "service_status", "dwt", "gt"]
+tx_vessel = events[vessel_cols].drop_duplicates("transaction_id")
+
+transactions = (
+    tx_vessel
+    .merge(tx_time, on="transaction_id", how="left")
+    .merge(tx_port, on="transaction_id", how="left")
+    .merge(sts_summary, on="transaction_id", how="left")
+    .merge(sts_wide, on="transaction_id", how="left")
+)
+
+transactions.to_excel(OUT / "transactions_clean.xlsx", index=False, sheet_name="transactions_clean")
+transactions[transactions["port"].isna()].to_excel(
+    OUT / "unmatched_ports.xlsx", index=False, sheet_name="unmatched_ports"
+)
+transactions[transactions["port_conflict_flag"].eq(1)].to_excel(
+    OUT / "port_conflicts.xlsx", index=False, sheet_name="port_conflicts"
+)</code></pre>
+
+      <div class="warning">
+        <strong>代码框架说明：</strong>上方是可执行框架，不是最终生产脚本。正式脚本需要根据实际采用的 sheet 补齐列名映射和去重逻辑；尤其是 <code>Sheet1</code> 这类已有 <code>transaction_id</code> 但表头不规则的 sheet，应单独写入读取映射。
+      </div>
+    </section>
+
+    <section id="stata">
+      <h2>6. Stata 可执行步骤：开放时长与预报开放时长</h2>
+      <p>
+        Stata 阶段从 Python 输出的交易层 <code>.xlsx</code> 文件中取 <code>transaction_id</code>、<code>startdate</code>、<code>starthour</code>、<code>port</code>。以该 date-hour-port 为锚点，计算前后 6、12、24 小时窗口内的开放时长，并将结果输出为 <code>.dta</code> 文件。
+      </p>
+
+      <div class="assumption">
+        <strong>窗口口径：</strong>本文档采用中心窗口且包含锚点小时，即 <code>abs(obs_hour - transaction_start_hour) &lt;= 6</code>、<code>&lt;= 12</code>、<code>&lt;= 24</code>。若要求严格的前后各 6 小时但不包含端点，应在 do-file 中把条件改为 <code>&lt; 6</code> 等。
+      </div>
+
+      <h3>6.1 历史锚地开放状态：生成 <code>openhour_6</code>、<code>openhour_12</code>、<code>openhour_24</code></h3>
+      <pre><code>version 17
+clear all
+set more off
+
+global ROOT "."
+global OUT  "outputs"
+capture mkdir "$OUT"
+
+* 1. 读取 Python 输出的交易层 xlsx 数据。
+import excel "$OUT/transactions_clean.xlsx", sheet("transactions_clean") firstrow clear
+keep transaction_id port startdate starthour
+drop if missing(transaction_id)
+
+gen start_td = daily(startdate, "YMD")
+format start_td %tdCCYY-NN-DD
+destring starthour, replace force
+gen anchor_tc = dhms(start_td, starthour, 0, 0)
+format anchor_tc %tc
+
+tempfile tx tx_ids
+save `tx', replace
+keep transaction_id
+duplicates drop
+save `tx_ids', replace
+
+* 2. 整理小时级锚地开放数据。
+use "锚地开放.dta", clear
+gen obs_tc = dhms(date_numeric, hour, 0, 0)
+format obs_tc %tc
+gen open = (status == "Open")
+keep port obs_tc open
+tempfile anch_open
+save `anch_open', replace
+
+* 3. 按 port join，并计算交易开始前后窗口内的开放小时数。
+use `tx', clear
+drop if missing(port)
+joinby port using `anch_open'
+gen diff_h = (obs_tc - anchor_tc) / (1000 * 60 * 60)
+
+foreach w in 6 12 24 {
+    gen open_in_`w' = open * (abs(diff_h) &lt;= `w')
+}
+
+collapse ///
+    (sum) openhour_6  = open_in_6 ///
+          openhour_12 = open_in_12 ///
+          openhour_24 = open_in_24, ///
+    by(transaction_id)
+
+tempfile hist_open
+save `hist_open', replace
+
+* 4. 保留全部 transaction_id；无法匹配的交易开放小时为空值，便于后续检查。
+use `tx_ids', clear
+merge 1:1 transaction_id using `hist_open', nogen
+save "$OUT/openhour_history.dta", replace</code></pre>
+
+      <h3>6.2 气象预报开放时长：生成六个 forecast 变量</h3>
+      <p>
+        气象预报开放时长需要两套规则：
+      </p>
+      <ul>
+        <li><strong>v1：</strong>气象指数 1 视为不开放，2、3、4 视为开放。</li>
+        <li><strong>v2：</strong>按 Average closure frequency 转为开放概率。MIO=1 开放概率 28%，MIO=2 为 73%，MIO=3 为 87%，MIO=4 为 88%。窗口内开放时长为开放概率的小时加总。</li>
+      </ul>
+      <pre><code>version 17
+clear all
+set more off
+
+global ROOT "."
+global OUT  "outputs"
+capture mkdir "$OUT"
+
+* 1. 交易锚点。
+import excel "$OUT/transactions_clean.xlsx", sheet("transactions_clean") firstrow clear
+keep transaction_id port startdate starthour
+drop if missing(transaction_id)
+
+gen start_td = daily(startdate, "YMD")
+format start_td %tdCCYY-NN-DD
+destring starthour, replace force
+gen anchor_tc = dhms(start_td, starthour, 0, 0)
+format anchor_tc %tc
+
+tempfile tx tx_ids
+save `tx', replace
+keep transaction_id
+duplicates drop
+save `tx_ids', replace
+
+* 2. 整理气象预报数据。
+use "气象预报.dta", clear
+capture rename 气象指数 mio
+capture confirm numeric variable mio
+if _rc {
+    destring mio, replace force
+}
+
+gen obs_tc = dhms(date_numeric, hour, 0, 0)
+format obs_tc %tc
+
+* v1: 1 = closed, 2/3/4 = open。
+gen open_v1 = inlist(mio, 2, 3, 4)
+
+* v2: 使用 Average closure frequency 的开放概率。
+gen open_v2 = .
+replace open_v2 = 0.28 if mio == 1
+replace open_v2 = 0.73 if mio == 2
+replace open_v2 = 0.87 if mio == 3
+replace open_v2 = 0.88 if mio == 4
+
+keep port obs_tc open_v1 open_v2
+tempfile forecast
+save `forecast', replace
+
+* 3. 按 port join，并计算各窗口 forecast open hours。
+use `tx', clear
+drop if missing(port)
+joinby port using `forecast'
+gen diff_h = (obs_tc - anchor_tc) / (1000 * 60 * 60)
+
+foreach w in 6 12 24 {
+    gen openf_v1_in_`w' = open_v1 * (abs(diff_h) &lt;= `w')
+    gen openf_v2_in_`w' = open_v2 * (abs(diff_h) &lt;= `w')
+}
+
+collapse ///
+    (sum) openhourf_6_v1  = openf_v1_in_6 ///
+          openhourf_12_v1 = openf_v1_in_12 ///
+          openhourf_24_v1 = openf_v1_in_24 ///
+          openhourf_6_v2  = openf_v2_in_6 ///
+          openhourf_12_v2 = openf_v2_in_12 ///
+          openhourf_24_v2 = openf_v2_in_24, ///
+    by(transaction_id)
+
+tempfile forecast_open
+save `forecast_open', replace
+
+* 4. 保留全部 transaction_id。
+use `tx_ids', clear
+merge 1:1 transaction_id using `forecast_open', nogen
+save "$OUT/openhour_forecast.dta", replace</code></pre>
+
+      <h3>6.3 合并回交易层主表</h3>
+      <pre><code>version 17
+clear all
+set more off
+
+global OUT "outputs"
+
+import excel "$OUT/transactions_clean.xlsx", sheet("transactions_clean") firstrow clear
+tempfile tx_clean
+save `tx_clean', replace
+
+merge 1:1 transaction_id using "$OUT/openhour_history.dta", nogen
+merge 1:1 transaction_id using "$OUT/openhour_forecast.dta", nogen
+
+save "$OUT/transactions_with_openhours.dta", replace</code></pre>
+    </section>
+
+    <section id="qa">
+      <h2>7. 可审查执行清单</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>交易清洗审查</h3>
+          <ul>
+            <li>原始有效事件行数是否与读取日志一致。</li>
+            <li>交易数是否等于非空 vessel 行数或源 <code>transaction_id</code> 去重数。</li>
+            <li>vessel 字段解析失败样本是否可解释。</li>
+            <li>重复交易删除前后的数量和 key 是否可追溯。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>时间审查</h3>
+          <ul>
+            <li>随机抽查 <code>startdate/starthour</code> 与原始最早 <code>Start</code>。</li>
+            <li>重点测试 23:30 之后跨日四舍五入。</li>
+            <li><code>duration</code> 是否等于原始最晚 end 与最早 start 的小时差四舍五入。</li>
+            <li>Stata 中 <code>startdate</code> 是否能稳定转为 <code>%td</code>。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>STS 与 supplier 审查</h3>
+          <ul>
+            <li><code>sts_episode_long.xlsx</code> 行数是否等于原始 STS 行数。</li>
+            <li><code>supplier_n</code> 合计是否等于 STS episode 数。</li>
+            <li>同一 supplier 多条 STS 是否被重复记录为 <code>supplier1</code>、<code>supplier2</code> 等。</li>
+            <li><code>duration_STS</code> 是否等于各 <code>duration_STS*</code> 加总。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>港口审查</h3>
+          <ul>
+            <li><code>At Zhoushan Xiazhimen Sou</code> 等缩写是否匹配为 <code>条帚门</code>。</li>
+            <li>未匹配港口样本是否主要为非对照表锚地。</li>
+            <li>多港口冲突交易是否进入 <code>port_conflicts.xlsx</code>。</li>
+            <li>最终 <code>port</code> 取值是否只包含 <code>条帚门</code>、<code>秀山东</code>、<code>虾峙门</code>、<code>衢山</code>、<code>马峙</code> 或空值。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Stata 匹配审查</h3>
+          <ul>
+            <li>交易层 <code>port</code> 与两个 .dta 中 <code>port</code> 取值完全一致。</li>
+            <li>join 后每笔交易在窗口内的理论最大小时数符合口径：±6 为最多 13 个小时点，±12 为最多 25 个，±24 为最多 49 个。</li>
+            <li>无法匹配的交易是否由 <code>port</code> 空值、日期超出外部数据范围或港口名不一致造成。</li>
+            <li>v2 开放小时为概率和，因此可以是小数；v1 与历史开放小时为整数。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>最终交付审查</h3>
+          <ul>
+            <li><code>transactions_clean.xlsx</code> 可独立复现交易层字段。</li>
+            <li><code>openhour_history.dta</code> 和 <code>openhour_forecast.dta</code> 均保留 <code>transaction_id</code>。</li>
+            <li><code>transactions_with_openhours.dta</code> 包含全部目标变量。</li>
+            <li>QA 报告列明输入行数、输出交易数、缺失和异常样本。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>8. 建议最终产物</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>产物</th>
+            <th>生成工具</th>
+            <th>用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>outputs/transactions_clean.xlsx</code></td>
+            <td>Python</td>
+            <td>交易层清洗主表，作为 Stata 匹配输入。</td>
+          </tr>
+          <tr>
+            <td><code>outputs/sts_episode_long.xlsx</code></td>
+            <td>Python</td>
+            <td>每条 STS episode 的长表，便于核查多 supplier 与多 STS。</td>
+          </tr>
+          <tr>
+            <td><code>outputs/unmatched_ports.xlsx</code>、<code>outputs/port_conflicts.xlsx</code></td>
+            <td>Python</td>
+            <td>港口未匹配与冲突复核。</td>
+          </tr>
+          <tr>
+            <td><code>outputs/openhour_history.dta</code></td>
+            <td>Stata</td>
+            <td>历史开放状态计算结果：<code>openhour_6</code>、<code>openhour_12</code>、<code>openhour_24</code>。</td>
+          </tr>
+          <tr>
+            <td><code>outputs/openhour_forecast.dta</code></td>
+            <td>Stata</td>
+            <td>预报开放时长六个变量。</td>
+          </tr>
+          <tr>
+            <td><code>outputs/transactions_with_openhours.dta</code></td>
+            <td>Stata</td>
+            <td>最终可分析数据。</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="small">
+        备注：PDF 中第 4 条“提取加油的结束时间”变量名写作 <code>startdate_STS</code> 和 <code>starthour_STS</code>，从上下文判断应为结束日期/小时字段；本方案按多 STS 结构改写为 <code>end_STS*</code>、<code>end_STS_final</code> 和 <code>endhour_STS_final</code>。
+      </p>
+    </section>
+  </main>
+</body>
+</html>

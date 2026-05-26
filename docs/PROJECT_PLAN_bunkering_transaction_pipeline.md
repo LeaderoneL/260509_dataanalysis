@@ -38,9 +38,7 @@ project_root/
 │   └── 04_transaction_with_weather.dta
 │
 ├── data_final/
-│   ├── bunkering_transaction_final.dta
-│   ├── bunkering_transaction_final.xlsx
-│   └── variable_dictionary.xlsx
+│   └── bunkering_transaction_final.dta
 │
 ├── logs/
 │   ├── unmatched_ports.xlsx
@@ -79,7 +77,7 @@ project_root/
 | Stage 2 | `02_build_transaction_level.py` | 聚合为一行一个 transaction，并按每次 STS 展开 | `02_transaction_level_base.xlsx` |
 | Stage 3 | `03_match_anchor_open.do` | 匹配锚地开放数据 | `03_transaction_with_anchor.dta` |
 | Stage 4 | `04_match_weather_forecast.do` | 匹配气象预报数据 | `04_transaction_with_weather.dta` |
-| Stage 5 | `05_quality_checks.py` | 全面质量检查与日志输出 | `bunkering_transaction_final.*` 与 logs |
+| Stage 5 | `05_quality_checks.py` | 全面质量检查与日志输出 | `bunkering_transaction_final.dta` 与 logs |
 
 ---
 
@@ -408,26 +406,22 @@ weather_index in {2, 3, 4} -> open = 1
 
 ### 6.4 版本 2 计算规则
 
-需求说明中只给出原则：
-
 ```text
 open probability = 1 - closure frequency
 ```
 
-因此必须先确认 closure frequency 表。
+使用 `closure_frequency.csv` 的 `Average` 列：
 
-推荐做法：
+| MIO | closure frequency | open probability |
+|---:|---:|---:|
+| 1 | 72% | 0.28 |
+| 2 | 27% | 0.73 |
+| 3 | 13% | 0.87 |
+| 4 | 12% | 0.88 |
 
-1. 如果用户提供 closure frequency 表，则使用用户提供的表；
-2. 如果没有提供，不能擅自用气象预报数据经验估计并当作正式结果；
-3. 可以临时生成一个 placeholder 版本，但必须在日志和变量名中标记为 provisional；
-4. 最终交付前必须补齐 closure frequency 表。
+### 6.5 closure frequency 来源
 
-### 6.5 推荐 closure frequency 表结构
-
-```text
-port | weather_index | closure_frequency
-```
+`data_raw/closure_frequency.csv`。正式计算使用 `Average`，不使用 port-specific 列。
 
 示例：
 
@@ -674,21 +668,9 @@ max_STS = 每个 transaction 的 STS 行数最大值
 匹配到了数据，但开放小时数为 0
 ```
 
-### 9.5 建议修正：forecast v2 不能擅自经验估计
+### 9.5 forecast v2 口径
 
-如果没有 closure frequency 表，版本 2 不能直接声称完成。
-
-应在结果中标明：
-
-```text
-openhourf_*_v2 暂缺，等待 closure frequency 表
-```
-
-或使用临时估计但明确命名为：
-
-```text
-openhourf_*_v2_provisional
-```
+forecast v2 已有正式来源：`data_raw/closure_frequency.csv` 的 `Average` 列。不得把 port-specific 列或经验估计结果混入正式 `openhourf_*_v2` 变量。
 
 ---
 
@@ -788,5 +770,6 @@ logs/processing_summary.md
 - 气象预报变量 `openhourf_*_v1` 已生成；
 - 气象预报变量 `openhourf_*_v2` 有明确 closure frequency 来源；
 - 未匹配港口、多港口、多 STS、同 supplier 多 STS、跨日四舍五入、duplicate 均有检查日志；
-- 最终输出 `.dta` 和 `.xlsx` 两个版本；
+- Python 阶段输出 `.xlsx` 中间表，Stata 阶段输出 `.dta` 结果表；
+- 最终输出 `bunkering_transaction_final.dta`；
 - `logs/processing_summary.md` 明确说明所有检查结果。

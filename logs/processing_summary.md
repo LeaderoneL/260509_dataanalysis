@@ -1,4 +1,4 @@
-# Processing Summary — 2026-05-18 00:48:14
+# Processing Summary — 2026-05-21 17:04:45
 
 ## Data Volume
 - Raw rows: 4422
@@ -12,6 +12,7 @@
 - max_STS: 9
 - supplier_n = STS record count: PASS
 - duration_STS = sum(duration_STSk): PASS
+- end_STS_final = last STS endpoint: PASS
 - Same-supplier multi-STS cases: 100
 
 ## Port Matching
@@ -20,25 +21,33 @@
 - All ports from valid table: PASS
 
 ## Anchor Open Matching
-- Match rate (all transactions): 98.1%
-- Match rate (transactions with port): 100.0%
-- openhour_6 mean: 9.3
-- openhour_12 mean: 17.8
-- openhour_24 mean: 34.7
+- Match rate (all transactions): 90.0%
+- Match rate (transactions with port): 91.7%
+- openhour_6 mean: 10.1
+- openhour_12 mean: 19.5
+- openhour_24 mean: 37.9
 
 ## Weather Forecast Matching
-- Match rate (all transactions): 98.1%
-- match rate (with port): 100.0%
-- v1 openhourf_6 mean: 9.7
-- v1 openhourf_12 mean: 18.6
-- v1 openhourf_24 mean: 36.4
-- v2 openhourf_6 mean: 8.3
-- v2 openhourf_12 mean: 16.0
-- v2 openhourf_24 mean: 31.3
+- Match rate (all transactions): 87.7%
+- match rate (with port): 89.4%
+- v1 openhourf_6 mean: 10.8
+- v1 openhourf_12 mean: 20.8
+- v1 openhourf_24 mean: 40.7
+- v2 openhourf_6 mean: 9.5
+- v2 openhourf_12 mean: 18.2
+- v2 openhourf_24 mean: 35.6
+
+## Window Coverage
+- Anchor 6h: full=1443, partial=0, no coverage=161
+- Anchor 12h: full=1443, partial=0, no coverage=161
+- Anchor 24h: full=1443, partial=0, no coverage=161
+- Weather 6h: full=1403, partial=1, no coverage=200
+- Weather 12h: full=1400, partial=5, no coverage=199
+- Weather 24h: full=1400, partial=7, no coverage=197
 
 ## Closure Frequency Source
-- closure_frequency.csv: port-specific closure frequencies (Nov 2022 – Jul 2024)
-- v2 uses port-specific open probability = 1 - closure_frequency
+- closure_frequency.csv: Average closure frequencies
+- v2 uses Average open probability = 1 - Average closure_frequency
 
 ## Log Files
 - unmatched_ports.xlsx

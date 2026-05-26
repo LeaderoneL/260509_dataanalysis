@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Stage 5: Quality checks and final output generation.
+"""Stage 5: Quality checks and final Stata output generation.
 
 Validates the full pipeline, generates logs, and produces final
-outputs in both .dta and .xlsx formats.
+output in .dta format.
 """
 
 import pandas as pd
@@ -26,6 +26,25 @@ tx_final = pd.read_stata(DATA_INT / "04_transaction_with_weather.dta")
 for col in tx_final.columns:
     if tx_final[col].dtype == object:
         tx_final[col] = tx_final[col].replace("", np.nan)
+
+def coverage_counts(df, col, expected):
+    s = df[col]
+    return {
+        "full": int((s == expected).sum()),
+        "partial": int(((s > 0) & (s < expected)).sum()),
+        "none": int((s == 0).sum()),
+        "missing": int(s.isna().sum()),
+    }
+
+
+def date_key(value):
+    if pd.isna(value):
+        return None
+    parsed = pd.to_datetime(value, errors="coerce")
+    if pd.isna(parsed):
+        return str(value)
+    return parsed.strftime("%Y-%m-%d")
+
 
 print("=" * 60)
 print("STAGE 5: QUALITY CHECKS & FINAL OUTPUT")
@@ -84,6 +103,10 @@ if mismatch_count > 0:
     ]
     print(f"  Mismatched transactions: {len(mismatched)}")
     mismatched.to_excel(LOGS / "supplier_n_mismatches.xlsx")
+else:
+    stale_supplier_log = LOGS / "supplier_n_mismatches.xlsx"
+    if stale_supplier_log.exists():
+        stale_supplier_log.unlink()
 
 # ═══════════════════════════════════════════════════════════════════
 # Check 4: duration_STS = sum of all duration_STSk
@@ -105,15 +128,36 @@ print(f"  duration_STS match: {'PASS' if n_mismatch_dur == 0 else 'FAIL'}")
 max_sts = max([int(c.split("_STS")[-1]) for c in tx_final.columns
                if c.startswith("end_STS") and c != "end_STS_final"] + [0])
 
-# For transactions with at least 1 STS, check end_STS_final
-sts_tx = tx_final[tx_final["supplier_n"] > 0].copy()
-if max_sts > 0:
-    # Find the last non-null end_STS for each row
-    last_end_col = f"end_STS{max_sts}"
-    # Actually, the last STS is the one with the highest k that has a non-null value
-    # For simplicity, check that end_STS_final is one of the end_STS values
-    pass
-print(f"  end_STS_final check: max_STS={max_sts}")
+end_sts_mismatches = []
+for _, row in tx_final[tx_final["supplier_n"] > 0].iterrows():
+    k = int(row["supplier_n"])
+    expected_date = date_key(row.get(f"end_STS{k}"))
+    actual_date = date_key(row.get("end_STS_final"))
+    expected_hour = row.get(f"endhour_STS{k}")
+    actual_hour = row.get("endhour_STS_final")
+    if expected_date != actual_date or expected_hour != actual_hour:
+        end_sts_mismatches.append({
+            "transaction_id": row["transaction_id"],
+            "supplier_n": k,
+            "expected_end_STS_final": expected_date,
+            "actual_end_STS_final": actual_date,
+            "expected_endhour_STS_final": expected_hour,
+            "actual_endhour_STS_final": actual_hour,
+        })
+
+end_sts_mismatch_count = len(end_sts_mismatches)
+print(f"\n--- Check 5: end_STS_final integrity ---")
+print(f"  max_STS: {max_sts}")
+print(f"  Mismatches: {end_sts_mismatch_count}")
+print(f"  end_STS_final match: {'PASS' if end_sts_mismatch_count == 0 else 'FAIL'}")
+if end_sts_mismatches:
+    pd.DataFrame(end_sts_mismatches).to_excel(
+        LOGS / "end_sts_final_mismatches.xlsx", index=False
+    )
+else:
+    stale_end_log = LOGS / "end_sts_final_mismatches.xlsx"
+    if stale_end_log.exists():
+        stale_end_log.unlink()
 
 # ═══════════════════════════════════════════════════════════════════
 # Check 6: Port matching
@@ -162,6 +206,32 @@ print(f"  weather_match (with port): {tx_with_port['weather_match_flag'].mean() 
 print(f"  v1 openhourf_6 range: {tx_final['openhourf_6_v1'].min():.0f} - {tx_final['openhourf_6_v1'].max():.0f}")
 print(f"  v1 openhourf_12 range: {tx_final['openhourf_12_v1'].min():.0f} - {tx_final['openhourf_12_v1'].max():.0f}")
 print(f"  v1 openhourf_24 range: {tx_final['openhourf_24_v1'].min():.0f} - {tx_final['openhourf_24_v1'].max():.0f}")
+
+# ═══════════════════════════════════════════════════════════════════
+# Check 8b: Window coverage
+# ═══════════════════════════════════════════════════════════════════
+expected_coverage = {6: 13, 12: 25, 24: 49}
+anchor_coverage = {
+    w: coverage_counts(tx_final, f"anchor_window_coverage_{w}", expected)
+    for w, expected in expected_coverage.items()
+}
+weather_coverage = {
+    w: coverage_counts(tx_final, f"weather_window_coverage_{w}", expected)
+    for w, expected in expected_coverage.items()
+}
+
+print(f"\n--- Check 8b: Window Coverage ---")
+for w in [6, 12, 24]:
+    ac = anchor_coverage[w]
+    wc = weather_coverage[w]
+    print(
+        f"  Anchor {w}h coverage: full={ac['full']}, "
+        f"partial={ac['partial']}, none={ac['none']}, missing={ac['missing']}"
+    )
+    print(
+        f"  Weather {w}h coverage: full={wc['full']}, "
+        f"partial={wc['partial']}, none={wc['none']}, missing={wc['missing']}"
+    )
 
 # ═══════════════════════════════════════════════════════════════════
 # Check 9: Same supplier multi-STS
@@ -220,14 +290,12 @@ for col in date_cols:
     if col in tx_final.columns:
         tx_final[col] = tx_final[col].astype(str)
 
-# Save final outputs
+# Save final Stata output
 tx_final.to_stata(DATA_FINAL / "bunkering_transaction_final.dta",
                   write_index=False, version=118)
-tx_final.to_excel(DATA_FINAL / "bunkering_transaction_final.xlsx", index=False)
 
 print(f"\n=== Final Outputs ===")
 print(f"  {DATA_FINAL / 'bunkering_transaction_final.dta'}")
-print(f"  {DATA_FINAL / 'bunkering_transaction_final.xlsx'}")
 print(f"  Transactions: {len(tx_final)}")
 print(f"  Variables: {len(tx_final.columns)}")
 
@@ -248,6 +316,7 @@ summary = f"""# Processing Summary — {datetime.now().strftime('%Y-%m-%d %H:%M:
 - max_STS: {max_sts}
 - supplier_n = STS record count: {'PASS' if mismatch_count == 0 else 'FAIL'}
 - duration_STS = sum(duration_STSk): {'PASS' if n_mismatch_dur == 0 else 'FAIL'}
+- end_STS_final = last STS endpoint: {'PASS' if end_sts_mismatch_count == 0 else 'FAIL'}
 - Same-supplier multi-STS cases: {len(same_sup_ids)}
 
 ## Port Matching
@@ -272,9 +341,17 @@ summary = f"""# Processing Summary — {datetime.now().strftime('%Y-%m-%d %H:%M:
 - v2 openhourf_12 mean: {tx_final['openhourf_12_v2'].mean():.1f}
 - v2 openhourf_24 mean: {tx_final['openhourf_24_v2'].mean():.1f}
 
+## Window Coverage
+- Anchor 6h: full={anchor_coverage[6]['full']}, partial={anchor_coverage[6]['partial']}, no coverage={anchor_coverage[6]['none']}
+- Anchor 12h: full={anchor_coverage[12]['full']}, partial={anchor_coverage[12]['partial']}, no coverage={anchor_coverage[12]['none']}
+- Anchor 24h: full={anchor_coverage[24]['full']}, partial={anchor_coverage[24]['partial']}, no coverage={anchor_coverage[24]['none']}
+- Weather 6h: full={weather_coverage[6]['full']}, partial={weather_coverage[6]['partial']}, no coverage={weather_coverage[6]['none']}
+- Weather 12h: full={weather_coverage[12]['full']}, partial={weather_coverage[12]['partial']}, no coverage={weather_coverage[12]['none']}
+- Weather 24h: full={weather_coverage[24]['full']}, partial={weather_coverage[24]['partial']}, no coverage={weather_coverage[24]['none']}
+
 ## Closure Frequency Source
-- closure_frequency.csv: port-specific closure frequencies (Nov 2022 – Jul 2024)
-- v2 uses port-specific open probability = 1 - closure_frequency
+- closure_frequency.csv: Average closure frequencies
+- v2 uses Average open probability = 1 - Average closure_frequency
 
 ## Log Files
 - unmatched_ports.xlsx

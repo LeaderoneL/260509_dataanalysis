@@ -30,6 +30,8 @@ print(f"After removing duplicates: {len(df_clean)} rows, "
       f"{df_clean['transaction_id'].nunique()} transactions")
 
 # ── Parse rounded datetimes ────────────────────────────────────────
+df_clean["start_dt"] = pd.to_datetime(df_clean["start_dt"])
+df_clean["end_dt"] = pd.to_datetime(df_clean["end_dt"])
 df_clean["start_dt_round"] = pd.to_datetime(df_clean["start_dt_round"])
 df_clean["end_dt_round"] = pd.to_datetime(df_clean["end_dt_round"])
 
@@ -39,6 +41,8 @@ df_clean["end_dt_round"] = pd.to_datetime(df_clean["end_dt_round"])
 
 # --- Transaction time boundaries ---
 tx_time = df_clean.groupby("transaction_id").agg(
+    tx_start_dt_raw=("start_dt", "min"),
+    tx_end_dt_raw=("end_dt", "max"),
     tx_start_dt=("start_dt_round", "min"),
     tx_end_dt=("end_dt_round", "max"),
 ).reset_index()
@@ -48,7 +52,7 @@ tx_time["starthour"] = tx_time["tx_start_dt"].dt.hour
 tx_time["enddate"] = tx_time["tx_end_dt"].dt.date
 tx_time["endhour"] = tx_time["tx_end_dt"].dt.hour
 tx_time["duration"] = (
-    (tx_time["tx_end_dt"] - tx_time["tx_start_dt"]).dt.total_seconds() / 3600
+    (tx_time["tx_end_dt_raw"] - tx_time["tx_start_dt_raw"]).dt.total_seconds() / 3600
 ).round(0).astype(int)
 
 # --- Vessel info (first non-null per transaction) ---
@@ -88,14 +92,18 @@ def resolve_port(grp):
                       if len(unmatched_raw) > 0 else None})
 
 
-port_info = df_clean.groupby("transaction_id").apply(resolve_port).reset_index()
+port_info = (
+    df_clean.groupby("transaction_id", group_keys=False)
+    .apply(resolve_port, include_groups=False)
+    .reset_index()
+)
 
 # ═══════════════════════════════════════════════════════════════════
 # STS expansion
 # ═══════════════════════════════════════════════════════════════════
 
 sts_rows = df_clean[df_clean["is_sts"] == 1].copy()
-sts_rows = sts_rows.sort_values(["transaction_id", "start_dt_round"])
+sts_rows = sts_rows.sort_values(["transaction_id", "start_dt", "end_dt", "row_id"])
 
 # Assign STS sequence number within each transaction
 sts_rows["sts_seq"] = sts_rows.groupby("transaction_id").cumcount() + 1
@@ -121,11 +129,18 @@ for k in range(1, max_sts + 1):
         sts_expanded[f"starthour_STS{k}"] = sts_pivoted["start_dt_round"][k].dt.hour
         sts_expanded[f"end_STS{k}"] = sts_pivoted["end_dt_round"][k].dt.date
         sts_expanded[f"endhour_STS{k}"] = sts_pivoted["end_dt_round"][k].dt.hour
-        # duration_STS{k} in hours
-        sts_expanded[f"duration_STS{k}"] = (
-            (sts_pivoted["end_dt_round"][k] - sts_pivoted["start_dt_round"][k])
-            .dt.total_seconds() / 3600
-        ).round(1)
+        # duration_STS{k}: use raw start/end difference, then round to hours.
+        # The rounded start/end timestamps are for date-hour fields only.
+        raw_duration = (
+            sts_rows[sts_rows["sts_seq"] == k]
+            .set_index("transaction_id")
+            .assign(
+                duration=lambda d: (
+                    (d["end_dt"] - d["start_dt"]).dt.total_seconds() / 3600
+                ).round(0)
+            )["duration"]
+        )
+        sts_expanded[f"duration_STS{k}"] = raw_duration.reindex(sts_pivoted.index)
     else:
         sts_expanded[f"supplier{k}"] = None
         sts_expanded[f"start_STS{k}"] = None
@@ -145,9 +160,14 @@ duration_cols = [f"duration_STS{k}" for k in range(1, max_sts + 1)]
 sts_expanded_df["duration_STS"] = sts_expanded_df[duration_cols].sum(axis=1)
 
 # --- End STS final ---
-# Get the last STS end time per transaction
-last_sts = sts_rows.groupby("transaction_id")["end_dt_round"].max().reset_index()
-last_sts.columns = ["transaction_id", "end_STS_final_dt"]
+# Use the final expanded STS slot, not the maximum end time. This keeps
+# end_STS_final consistent with supplier_n and end_STS{supplier_n}.
+last_sts = (
+    sts_rows.sort_values(["transaction_id", "sts_seq"])
+    .groupby("transaction_id", as_index=False)
+    .tail(1)[["transaction_id", "end_dt_round"]]
+    .rename(columns={"end_dt_round": "end_STS_final_dt"})
+)
 last_sts["end_STS_final"] = last_sts["end_STS_final_dt"].dt.date
 last_sts["endhour_STS_final"] = last_sts["end_STS_final_dt"].dt.hour
 
@@ -166,6 +186,68 @@ final = final.merge(
 
 # Fill supplier_n for transactions with no STS
 final["supplier_n"] = final["supplier_n"].fillna(0).astype(int)
+
+# ═══════════════════════════════════════════════════════════════════
+# Transaction-level duplicate detection
+# ═══════════════════════════════════════════════════════════════════
+# Key: same vessel_code, same start date-hour, same end date-hour, same port
+final["_dup_key"] = (
+    final["vessel_code"].fillna("MISSING").astype(str)
+    + "|" + final["startdate"].astype(str)
+    + "|" + final["starthour"].fillna(-1).astype(int).astype(str)
+    + "|" + final["enddate"].astype(str)
+    + "|" + final["endhour"].fillna(-1).astype(int).astype(str)
+    + "|" + final["port"].fillna("NOPORT").astype(str)
+)
+
+# Within each key group, rank by supplier_n descending (keep richest record)
+final["_dup_rank"] = final.groupby("_dup_key")["supplier_n"].rank(
+    method="first", ascending=False
+)
+dup_mask = final["_dup_key"].duplicated(keep=False)
+n_dup_groups = final.loc[dup_mask, "_dup_key"].nunique()
+
+if n_dup_groups > 0:
+    dup_all = final[dup_mask].copy()
+
+    # Split: both-have-STS vs one-empty-shell
+    dup_all["_group_has_sts"] = dup_all.groupby("_dup_key")["supplier_n"].transform(
+        lambda x: (x > 0).sum()
+    )
+    real_dup = dup_all[dup_all["_group_has_sts"] >= 2]
+    shell_dup = dup_all[dup_all["_group_has_sts"] < 2]
+
+    dup_log_cols = [
+        "transaction_id", "vessel_name", "vessel_code",
+        "startdate", "starthour", "enddate", "endhour", "port",
+        "supplier_n"
+    ] + [c for c in final.columns if c.startswith("supplier") and c != "supplier_n"]
+
+    if len(real_dup) > 0:
+        real_dup[dup_log_cols].sort_values(
+            ["vessel_code", "startdate"]
+        ).to_excel(LOGS / "duplicate_transactions_real.xlsx", index=False)
+
+    if len(shell_dup) > 0:
+        shell_dup[dup_log_cols].sort_values(
+            ["vessel_code", "startdate"]
+        ).to_excel(LOGS / "duplicate_transactions_shell.xlsx", index=False)
+
+    # Remove all duplicates (keep rank=1 = highest supplier_n per group)
+    drop_ids = final.loc[dup_mask & (final["_dup_rank"] > 1), "transaction_id"].tolist()
+
+    print(f"\nTransaction-level duplicate groups: {n_dup_groups}")
+    print(f"  Both-have-STS groups: {real_dup['_dup_key'].nunique() if len(real_dup) > 0 else 0}")
+    print(f"  Empty-shell groups: {shell_dup['_dup_key'].nunique() if len(shell_dup) > 0 else 0}")
+    print(f"  Duplicate rows to remove: {len(drop_ids)}")
+    print(f"  Saved: logs/duplicate_transactions_real.xlsx + _shell.xlsx")
+
+    final = final[~final["transaction_id"].isin(drop_ids)]
+    print(f"  After dedup: {len(final)} transactions")
+else:
+    print(f"\nNo transaction-level duplicates found.")
+
+final = final.drop(columns=["_dup_key", "_dup_rank"])
 
 # ═══════════════════════════════════════════════════════════════════
 # Logs
@@ -236,6 +318,15 @@ output_cols = base_cols + sts_cols + summary_cols
 final = final[output_cols]
 
 # ── Save ───────────────────────────────────────────────────────────
+date_like_cols = [
+    c for c in final.columns
+    if c in {"startdate", "enddate", "end_STS_final"}
+    or c.startswith("start_STS")
+    or (c.startswith("end_STS") and not c.startswith("endhour_STS"))
+]
+for col in date_like_cols:
+    final[col] = pd.to_datetime(final[col], errors="coerce").dt.strftime("%Y-%m-%d")
+
 output_path = DATA_INT / "02_transaction_level_base.xlsx"
 final.to_excel(output_path, index=False)
 print(f"\nStage 2 complete. Output: {output_path}")
