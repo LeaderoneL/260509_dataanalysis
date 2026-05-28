@@ -1,4 +1,4 @@
-# Processing Summary — 2026-05-21 17:04:45
+# Processing Summary — 2026-05-26 21:36:07
 
 ## Data Volume
 - Raw rows: 4422
@@ -36,6 +36,9 @@
 - v2 openhourf_6 mean: 9.5
 - v2 openhourf_12 mean: 18.2
 - v2 openhourf_24 mean: 35.6
+- v3 openhourf_6 mean: 9.3
+- v3 openhourf_12 mean: 17.9
+- v3 openhourf_24 mean: 35.0
 
 ## Window Coverage
 - Anchor 6h: full=1443, partial=0, no coverage=161
@@ -48,6 +51,7 @@
 ## Closure Frequency Source
 - closure_frequency.csv: Average closure frequencies
 - v2 uses Average open probability = 1 - Average closure_frequency
+- v3 uses port-specific open probability = 1 - port-specific closure_frequency
 
 ## Log Files
 - unmatched_ports.xlsx
