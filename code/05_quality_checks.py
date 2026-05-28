@@ -340,6 +340,9 @@ summary = f"""# Processing Summary — {datetime.now().strftime('%Y-%m-%d %H:%M:
 - v2 openhourf_6 mean: {tx_final['openhourf_6_v2'].mean():.1f}
 - v2 openhourf_12 mean: {tx_final['openhourf_12_v2'].mean():.1f}
 - v2 openhourf_24 mean: {tx_final['openhourf_24_v2'].mean():.1f}
+- v3 openhourf_6 mean: {tx_final['openhourf_6_v3'].mean():.1f}
+- v3 openhourf_12 mean: {tx_final['openhourf_12_v3'].mean():.1f}
+- v3 openhourf_24 mean: {tx_final['openhourf_24_v3'].mean():.1f}
 
 ## Window Coverage
 - Anchor 6h: full={anchor_coverage[6]['full']}, partial={anchor_coverage[6]['partial']}, no coverage={anchor_coverage[6]['none']}
@@ -352,6 +355,7 @@ summary = f"""# Processing Summary — {datetime.now().strftime('%Y-%m-%d %H:%M:
 ## Closure Frequency Source
 - closure_frequency.csv: Average closure frequencies
 - v2 uses Average open probability = 1 - Average closure_frequency
+- v3 uses port-specific open probability = 1 - port-specific closure_frequency
 
 ## Log Files
 - unmatched_ports.xlsx
