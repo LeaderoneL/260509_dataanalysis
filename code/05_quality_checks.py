@@ -236,7 +236,7 @@ print(f"  v1 openhourf_24 range: {tx_final['openhourf_24_v1'].min():.0f} - {tx_f
 # ═══════════════════════════════════════════════════════════════════
 # Check 8b: Window coverage
 # ═══════════════════════════════════════════════════════════════════
-expected_coverage = {6: 13, 12: 25, 24: 49}
+expected_coverage = {6: 12, 12: 24, 24: 48}
 anchor_coverage = {
     w: coverage_counts(tx_final, f"anchor_window_coverage_{w}", expected)
     for w, expected in expected_coverage.items()

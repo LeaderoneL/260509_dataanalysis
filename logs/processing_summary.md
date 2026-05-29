@@ -1,4 +1,4 @@
-# Processing Summary — 2026-05-30 01:11:48
+# Processing Summary — 2026-05-30 01:43:40
 
 ## Data Volume
 - Raw rows: 4422
@@ -27,7 +27,7 @@
 - Match rate (all transactions): 90.2%
 - Match rate (transactions with port): 91.4%
 - openhour_6 mean: 9.3
-- openhour_12 mean: 18.6
+- openhour_12 mean: 18.7
 - openhour_24 mean: 37.1
 
 ## Weather Forecast Matching
@@ -44,12 +44,12 @@
 - v3 openhourf_24 mean: 34.2
 
 ## Window Coverage
-- Anchor 6h: full=0, partial=1406, no coverage=153
-- Anchor 12h: full=0, partial=1406, no coverage=153
-- Anchor 24h: full=0, partial=1406, no coverage=153
-- Weather 6h: full=0, partial=1366, no coverage=193
-- Weather 12h: full=0, partial=1366, no coverage=193
-- Weather 24h: full=0, partial=1369, no coverage=190
+- Anchor 6h: full=1406, partial=0, no coverage=153
+- Anchor 12h: full=1406, partial=0, no coverage=153
+- Anchor 24h: full=1406, partial=0, no coverage=153
+- Weather 6h: full=1364, partial=2, no coverage=193
+- Weather 12h: full=1361, partial=6, no coverage=192
+- Weather 24h: full=1361, partial=8, no coverage=190
 
 ## Closure Frequency Source
 - closure_frequency.csv: Average closure frequencies

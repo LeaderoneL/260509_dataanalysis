@@ -47,11 +47,11 @@ tx_time = df_clean.groupby("transaction_id").agg(
     tx_end_dt_round=("end_dt_round", "max"),
 ).reset_index()
 
-tx_time["startdate"] = tx_time["tx_start_dt_raw"].dt.date
-tx_time["starthour"] = tx_time["tx_start_dt_raw"].dt.hour
+tx_time["startdate"] = tx_time["tx_start_dt_round"].dt.date
+tx_time["starthour"] = tx_time["tx_start_dt_round"].dt.hour
 tx_time["start_mins"] = tx_time["tx_start_dt_raw"].dt.minute
-tx_time["enddate"] = tx_time["tx_end_dt_raw"].dt.date
-tx_time["endhour"] = tx_time["tx_end_dt_raw"].dt.hour
+tx_time["enddate"] = tx_time["tx_end_dt_round"].dt.date
+tx_time["endhour"] = tx_time["tx_end_dt_round"].dt.hour
 tx_time["end_mins"] = tx_time["tx_end_dt_raw"].dt.minute
 tx_time["duration"] = (
     (tx_time["tx_end_dt_raw"] - tx_time["tx_start_dt_raw"]).dt.total_seconds() / 3600
@@ -119,7 +119,7 @@ print(f"max_STS = {max_sts}")
 sts_pivoted = sts_rows.pivot_table(
     index="transaction_id",
     columns="sts_seq",
-    values=["supplier_raw", "start_dt", "end_dt"],
+    values=["supplier_raw", "start_dt", "end_dt", "start_dt_round", "end_dt_round"],
     aggfunc="first"
 )
 
@@ -128,11 +128,11 @@ sts_expanded = {}
 for k in range(1, max_sts + 1):
     if k in sts_pivoted["supplier_raw"].columns:
         sts_expanded[f"supplier{k}"] = sts_pivoted["supplier_raw"][k]
-        sts_expanded[f"start_STS{k}"] = sts_pivoted["start_dt"][k].dt.date
-        sts_expanded[f"starthour_STS{k}"] = sts_pivoted["start_dt"][k].dt.hour
+        sts_expanded[f"start_STS{k}"] = sts_pivoted["start_dt_round"][k].dt.date
+        sts_expanded[f"starthour_STS{k}"] = sts_pivoted["start_dt_round"][k].dt.hour
         sts_expanded[f"start_STS{k}_mins"] = sts_pivoted["start_dt"][k].dt.minute
-        sts_expanded[f"end_STS{k}"] = sts_pivoted["end_dt"][k].dt.date
-        sts_expanded[f"endhour_STS{k}"] = sts_pivoted["end_dt"][k].dt.hour
+        sts_expanded[f"end_STS{k}"] = sts_pivoted["end_dt_round"][k].dt.date
+        sts_expanded[f"endhour_STS{k}"] = sts_pivoted["end_dt_round"][k].dt.hour
         sts_expanded[f"end_STS{k}_mins"] = sts_pivoted["end_dt"][k].dt.minute
         # duration_STS{k}: use raw start/end difference in fractional hours.
         raw_duration = (
@@ -171,12 +171,15 @@ sts_expanded_df["duration_STS"] = sts_expanded_df[duration_cols].sum(axis=1).rou
 last_sts = (
     sts_rows.sort_values(["transaction_id", "sts_seq"])
     .groupby("transaction_id", as_index=False)
-    .tail(1)[["transaction_id", "end_dt"]]
-    .rename(columns={"end_dt": "end_STS_final_dt"})
+    .tail(1)[["transaction_id", "end_dt", "end_dt_round"]]
+    .rename(columns={
+        "end_dt": "end_STS_final_raw_dt",
+        "end_dt_round": "end_STS_final_dt",
+    })
 )
 last_sts["end_STS_final"] = last_sts["end_STS_final_dt"].dt.date
 last_sts["endhour_STS_final"] = last_sts["end_STS_final_dt"].dt.hour
-last_sts["end_STS_final_mins"] = last_sts["end_STS_final_dt"].dt.minute
+last_sts["end_STS_final_mins"] = last_sts["end_STS_final_raw_dt"].dt.minute
 
 # ═══════════════════════════════════════════════════════════════════
 # Assemble final dataset

@@ -33,16 +33,6 @@ if _rc {
     destring starthour, replace force
 }
 
-capture confirm variable start_mins
-if _rc {
-    gen byte start_mins = 0
-}
-capture confirm numeric variable start_mins
-if _rc {
-    destring start_mins, replace force
-}
-replace start_mins = 0 if missing(start_mins)
-
 capture confirm numeric variable startdate
 if !_rc {
     gen str10 startdate_str = string(startdate, "%tdCCYY-NN-DD")
@@ -51,7 +41,7 @@ else {
     gen str10 startdate_str = startdate
 }
 
-gen double start_dt = clock(startdate_str + " " + string(starthour, "%02.0f") + ":" + string(start_mins, "%02.0f") + ":00", "YMDhms")
+gen double start_dt = clock(startdate_str + " " + string(starthour, "%02.0f") + ":00:00", "YMDhms")
 format start_dt %tc
 drop startdate_str
 
