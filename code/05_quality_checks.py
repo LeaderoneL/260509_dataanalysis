@@ -153,12 +153,9 @@ for _, row in tx_final[tx_final["supplier_n"] > 0].iterrows():
     actual_date = date_key(row.get("end_STS_final"))
     expected_hour = row.get(f"endhour_STS{k}")
     actual_hour = row.get("endhour_STS_final")
-    expected_mins = row.get(f"end_STS{k}_mins")
-    actual_mins = row.get("end_STS_final_mins")
     if (
         expected_date != actual_date
         or expected_hour != actual_hour
-        or expected_mins != actual_mins
     ):
         end_sts_mismatches.append({
             "transaction_id": row["transaction_id"],
@@ -167,8 +164,6 @@ for _, row in tx_final[tx_final["supplier_n"] > 0].iterrows():
             "actual_end_STS_final": actual_date,
             "expected_endhour_STS_final": expected_hour,
             "actual_endhour_STS_final": actual_hour,
-            "expected_end_STS_final_mins": expected_mins,
-            "actual_end_STS_final_mins": actual_mins,
         })
 
 end_sts_mismatch_count = len(end_sts_mismatches)
@@ -302,9 +297,13 @@ if unmatched_port_log.exists():
 # Create final output
 # ═══════════════════════════════════════════════════════════════════
 
-# Drop check column
+# Drop check column and minutes columns (not used in matching, removed from final output)
 if "duration_STS_check" in tx_final.columns:
     tx_final = tx_final.drop(columns=["duration_STS_check"])
+
+mins_cols = [c for c in tx_final.columns if c.endswith("_mins")]
+if mins_cols:
+    tx_final = tx_final.drop(columns=mins_cols)
 
 # Convert date columns to strings for Stata compatibility
 date_cols = ["startdate", "enddate"] + \
