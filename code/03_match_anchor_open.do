@@ -67,9 +67,9 @@ preserve
     format match_date %td
     gen match_hour = hh(match_dt)
 
-    gen byte in_6 = abs(offset) <= 6
-    gen byte in_12 = abs(offset) <= 12
-    gen byte in_24 = abs(offset) <= 24
+    gen byte in_6 = offset >= -6 & offset <= 5
+    gen byte in_12 = offset >= -12 & offset <= 11
+    gen byte in_24 = offset >= -24 & offset <= 23
 
     keep transaction_id port start_dt offset match_date match_hour in_*
     save `tx_match', replace
