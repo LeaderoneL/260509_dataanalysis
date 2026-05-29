@@ -206,6 +206,8 @@ def parse_dt(val):
 
 raw["start_dt"] = raw["start_raw"].apply(parse_dt)
 raw["end_dt"] = raw["end_raw"].apply(parse_dt)
+raw["start_mins"] = raw["start_dt"].dt.minute
+raw["end_mins"] = raw["end_dt"].dt.minute
 
 # Check for parse failures
 n_start_fail = raw["start_dt"].isna().sum()
@@ -367,6 +369,7 @@ output_cols = [
     "operation", "is_anchorage", "is_sts",
     "start_raw", "end_raw", "duration_raw", "duration_hours",
     "start_dt", "end_dt",
+    "start_mins", "end_mins",
     "start_dt_round", "end_dt_round",
     "startdate_round", "starthour_round",
     "enddate_round", "endhour_round",

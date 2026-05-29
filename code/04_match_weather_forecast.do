@@ -33,6 +33,16 @@ if _rc {
     destring starthour, replace force
 }
 
+capture confirm variable start_mins
+if _rc {
+    gen byte start_mins = 0
+}
+capture confirm numeric variable start_mins
+if _rc {
+    destring start_mins, replace force
+}
+replace start_mins = 0 if missing(start_mins)
+
 capture confirm numeric variable startdate
 if !_rc {
     gen str10 startdate_str = string(startdate, "%tdCCYY-NN-DD")
@@ -41,7 +51,7 @@ else {
     gen str10 startdate_str = startdate
 }
 
-gen double start_dt = clock(startdate_str + " " + string(starthour, "%02.0f") + ":00:00", "YMDhms")
+gen double start_dt = clock(startdate_str + " " + string(starthour, "%02.0f") + ":" + string(start_mins, "%02.0f") + ":00", "YMDhms")
 format start_dt %tc
 drop startdate_str
 
@@ -218,6 +228,84 @@ foreach v in weather_window_coverage_6 weather_window_coverage_12 weather_window
 }
 
 drop start_dt
+
+* ── Variable labels ────────────────────────────────────────────────
+* Core identifiers
+label variable transaction_id      "Transaction ID"
+label variable vessel_name          "Vessel name"
+label variable vessel_code          "Vessel IMO code"
+label variable vessel_type          "Vessel type"
+label variable in_service_commission "Vessel in-service commission"
+label variable dwt                  "Vessel deadweight tonnage"
+label variable gt                   "Vessel gross tonnage"
+label variable draught              "Vessel draught (m)"
+
+* Bunkering timing
+label variable startdate  "Bunkering start date"
+label variable starthour  "Bunkering start hour"
+label variable start_mins "Bunkering start minutes"
+label variable enddate    "Bunkering end date"
+label variable endhour    "Bunkering end hour"
+label variable end_mins   "Bunkering end minutes"
+label variable duration   "Bunkering duration (hours)"
+
+* Port matching
+label variable port              "Matched anchorage port"
+label variable port_multi_flag   "Multi-port transaction flag"
+label variable port_all_matched  "All matched port names"
+label variable unmatched_port    "Unmatched port location string"
+
+* STS suppliers (k = 1..9)
+forval k = 1/9 {
+    label variable supplier`k'        "STS supplier `k' name"
+    label variable start_STS`k'       "STS `k' start date"
+    label variable starthour_STS`k'   "STS `k' start hour"
+    label variable start_STS`k'_mins  "STS `k' start minutes"
+    label variable end_STS`k'         "STS `k' end date"
+    label variable endhour_STS`k'     "STS `k' end hour"
+    label variable end_STS`k'_mins    "STS `k' end minutes"
+    label variable duration_STS`k'    "STS `k' duration (hours)"
+}
+
+* STS aggregate
+label variable supplier_n          "Number of STS events"
+label variable duration_STS        "Total STS duration (hours)"
+label variable end_STS_final       "Final STS end date"
+label variable endhour_STS_final   "Final STS end hour"
+label variable end_STS_final_mins  "Final STS end minutes"
+
+* Anchor open hours
+label variable openhour_6  "Anchor open hours (前后6h window)"
+label variable openhour_12 "Anchor open hours (前后12h window)"
+label variable openhour_24 "Anchor open hours (前后24h window)"
+
+* Anchor window coverage
+label variable anchor_window_coverage_6  "Anchor data coverage: 6h window (hours)"
+label variable anchor_window_coverage_12 "Anchor data coverage: 12h window (hours)"
+label variable anchor_window_coverage_24 "Anchor data coverage: 24h window (hours)"
+label variable anchor_match_flag         "Anchor data matched flag"
+
+* Weather forecast: v1 (MIO binary open/close)
+label variable openhourf_6_v1  "Weather v1 open hours (前后6h window)"
+label variable openhourf_12_v1 "Weather v1 open hours (前后12h window)"
+label variable openhourf_24_v1 "Weather v1 open hours (前后24h window)"
+
+* Weather forecast: v2 (average open probability sum)
+label variable openhourf_6_v2  "Weather v2 avg open prob sum (前后6h window)"
+label variable openhourf_12_v2 "Weather v2 avg open prob sum (前后12h window)"
+label variable openhourf_24_v2 "Weather v2 avg open prob sum (前后24h window)"
+
+* Weather forecast: v3 (port-specific open probability sum)
+label variable openhourf_6_v3  "Weather v3 port-specific open prob sum (前后6h window)"
+label variable openhourf_12_v3 "Weather v3 port-specific open prob sum (前后12h window)"
+label variable openhourf_24_v3 "Weather v3 port-specific open prob sum (前后24h window)"
+
+* Weather window coverage
+label variable weather_window_coverage_6  "Weather data coverage: 6h window (hours)"
+label variable weather_window_coverage_12 "Weather data coverage: 12h window (hours)"
+label variable weather_window_coverage_24 "Weather data coverage: 24h window (hours)"
+label variable weather_match_flag         "Weather data matched flag"
+
 save "data_intermediate/04_transaction_with_weather.dta", replace
 
 display _n "=== Stage 4 Summary ==="

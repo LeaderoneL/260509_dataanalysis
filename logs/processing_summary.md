@@ -1,52 +1,55 @@
-# Processing Summary — 2026-05-26 21:36:07
+# Processing Summary — 2026-05-28 11:49:08
 
 ## Data Volume
 - Raw rows: 4422
 - Raw transactions: 1640
 - Duplicate rows removed: 193
-- Final transactions: 1604
+- Final transactions: 1559
 - Raw STS rows (non-dup): 2099
-- Final STS slots: 2099
+- Raw STS rows in retained transactions: 2084
+- Final STS slots: 2084
 
 ## STS Expansion
 - max_STS: 9
 - supplier_n = STS record count: PASS
 - duration_STS = sum(duration_STSk): PASS
+- duration_STSk >0 and <1h: 90
+- duration_STSk ==0h: 31
 - end_STS_final = last STS endpoint: PASS
 - Same-supplier multi-STS cases: 100
 
 ## Port Matching
-- Port match rate: 98.1%
-- Multi-port transactions: 26
+- Port match rate: 98.7%
+- Multi-port transactions: 30
 - All ports from valid table: PASS
 
 ## Anchor Open Matching
-- Match rate (all transactions): 90.0%
-- Match rate (transactions with port): 91.7%
+- Match rate (all transactions): 90.2%
+- Match rate (transactions with port): 91.4%
 - openhour_6 mean: 10.1
-- openhour_12 mean: 19.5
-- openhour_24 mean: 37.9
+- openhour_12 mean: 19.4
+- openhour_24 mean: 37.8
 
 ## Weather Forecast Matching
-- Match rate (all transactions): 87.7%
-- match rate (with port): 89.4%
-- v1 openhourf_6 mean: 10.8
-- v1 openhourf_12 mean: 20.8
-- v1 openhourf_24 mean: 40.7
-- v2 openhourf_6 mean: 9.5
-- v2 openhourf_12 mean: 18.2
-- v2 openhourf_24 mean: 35.6
-- v3 openhourf_6 mean: 9.3
-- v3 openhourf_12 mean: 17.9
-- v3 openhourf_24 mean: 35.0
+- Match rate (all transactions): 87.8%
+- match rate (with port): 89.0%
+- v1 openhourf_6 mean: 10.0
+- v1 openhourf_12 mean: 19.9
+- v1 openhourf_24 mean: 39.8
+- v2 openhourf_6 mean: 8.7
+- v2 openhourf_12 mean: 17.5
+- v2 openhourf_24 mean: 34.9
+- v3 openhourf_6 mean: 8.6
+- v3 openhourf_12 mean: 17.1
+- v3 openhourf_24 mean: 34.2
 
 ## Window Coverage
-- Anchor 6h: full=1443, partial=0, no coverage=161
-- Anchor 12h: full=1443, partial=0, no coverage=161
-- Anchor 24h: full=1443, partial=0, no coverage=161
-- Weather 6h: full=1403, partial=1, no coverage=200
-- Weather 12h: full=1400, partial=5, no coverage=199
-- Weather 24h: full=1400, partial=7, no coverage=197
+- Anchor 6h: full=1406, partial=0, no coverage=153
+- Anchor 12h: full=1406, partial=0, no coverage=153
+- Anchor 24h: full=1406, partial=0, no coverage=153
+- Weather 6h: full=0, partial=1366, no coverage=193
+- Weather 12h: full=0, partial=1366, no coverage=193
+- Weather 24h: full=0, partial=1369, no coverage=190
 
 ## Closure Frequency Source
 - closure_frequency.csv: Average closure frequencies

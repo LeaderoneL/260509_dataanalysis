@@ -29,7 +29,7 @@ df_clean = df[df["is_duplicate"] == 0].copy()
 print(f"After removing duplicates: {len(df_clean)} rows, "
       f"{df_clean['transaction_id'].nunique()} transactions")
 
-# ── Parse rounded datetimes ────────────────────────────────────────
+# ── Parse datetimes ────────────────────────────────────────────────
 df_clean["start_dt"] = pd.to_datetime(df_clean["start_dt"])
 df_clean["end_dt"] = pd.to_datetime(df_clean["end_dt"])
 df_clean["start_dt_round"] = pd.to_datetime(df_clean["start_dt_round"])
@@ -43,17 +43,19 @@ df_clean["end_dt_round"] = pd.to_datetime(df_clean["end_dt_round"])
 tx_time = df_clean.groupby("transaction_id").agg(
     tx_start_dt_raw=("start_dt", "min"),
     tx_end_dt_raw=("end_dt", "max"),
-    tx_start_dt=("start_dt_round", "min"),
-    tx_end_dt=("end_dt_round", "max"),
+    tx_start_dt_round=("start_dt_round", "min"),
+    tx_end_dt_round=("end_dt_round", "max"),
 ).reset_index()
 
-tx_time["startdate"] = tx_time["tx_start_dt"].dt.date
-tx_time["starthour"] = tx_time["tx_start_dt"].dt.hour
-tx_time["enddate"] = tx_time["tx_end_dt"].dt.date
-tx_time["endhour"] = tx_time["tx_end_dt"].dt.hour
+tx_time["startdate"] = tx_time["tx_start_dt_raw"].dt.date
+tx_time["starthour"] = tx_time["tx_start_dt_raw"].dt.hour
+tx_time["start_mins"] = tx_time["tx_start_dt_raw"].dt.minute
+tx_time["enddate"] = tx_time["tx_end_dt_raw"].dt.date
+tx_time["endhour"] = tx_time["tx_end_dt_raw"].dt.hour
+tx_time["end_mins"] = tx_time["tx_end_dt_raw"].dt.minute
 tx_time["duration"] = (
     (tx_time["tx_end_dt_raw"] - tx_time["tx_start_dt_raw"]).dt.total_seconds() / 3600
-).round(0).astype(int)
+).round(6)
 
 # --- Vessel info (first non-null per transaction) ---
 vessel_cols = ["vessel_name", "vessel_code", "vessel_type",
@@ -110,13 +112,14 @@ sts_rows["sts_seq"] = sts_rows.groupby("transaction_id").cumcount() + 1
 
 # Determine max_STS
 max_sts = sts_rows.groupby("transaction_id").size().max()
+max_sts = int(max_sts)
 print(f"max_STS = {max_sts}")
 
 # Pivot STS data: each seq becomes a set of columns
 sts_pivoted = sts_rows.pivot_table(
     index="transaction_id",
     columns="sts_seq",
-    values=["supplier_raw", "start_dt_round", "end_dt_round"],
+    values=["supplier_raw", "start_dt", "end_dt"],
     aggfunc="first"
 )
 
@@ -125,19 +128,20 @@ sts_expanded = {}
 for k in range(1, max_sts + 1):
     if k in sts_pivoted["supplier_raw"].columns:
         sts_expanded[f"supplier{k}"] = sts_pivoted["supplier_raw"][k]
-        sts_expanded[f"start_STS{k}"] = sts_pivoted["start_dt_round"][k].dt.date
-        sts_expanded[f"starthour_STS{k}"] = sts_pivoted["start_dt_round"][k].dt.hour
-        sts_expanded[f"end_STS{k}"] = sts_pivoted["end_dt_round"][k].dt.date
-        sts_expanded[f"endhour_STS{k}"] = sts_pivoted["end_dt_round"][k].dt.hour
-        # duration_STS{k}: use raw start/end difference, then round to hours.
-        # The rounded start/end timestamps are for date-hour fields only.
+        sts_expanded[f"start_STS{k}"] = sts_pivoted["start_dt"][k].dt.date
+        sts_expanded[f"starthour_STS{k}"] = sts_pivoted["start_dt"][k].dt.hour
+        sts_expanded[f"start_STS{k}_mins"] = sts_pivoted["start_dt"][k].dt.minute
+        sts_expanded[f"end_STS{k}"] = sts_pivoted["end_dt"][k].dt.date
+        sts_expanded[f"endhour_STS{k}"] = sts_pivoted["end_dt"][k].dt.hour
+        sts_expanded[f"end_STS{k}_mins"] = sts_pivoted["end_dt"][k].dt.minute
+        # duration_STS{k}: use raw start/end difference in fractional hours.
         raw_duration = (
             sts_rows[sts_rows["sts_seq"] == k]
             .set_index("transaction_id")
             .assign(
                 duration=lambda d: (
                     (d["end_dt"] - d["start_dt"]).dt.total_seconds() / 3600
-                ).round(0)
+                ).round(6)
             )["duration"]
         )
         sts_expanded[f"duration_STS{k}"] = raw_duration.reindex(sts_pivoted.index)
@@ -145,8 +149,10 @@ for k in range(1, max_sts + 1):
         sts_expanded[f"supplier{k}"] = None
         sts_expanded[f"start_STS{k}"] = None
         sts_expanded[f"starthour_STS{k}"] = np.nan
+        sts_expanded[f"start_STS{k}_mins"] = np.nan
         sts_expanded[f"end_STS{k}"] = None
         sts_expanded[f"endhour_STS{k}"] = np.nan
+        sts_expanded[f"end_STS{k}_mins"] = np.nan
         sts_expanded[f"duration_STS{k}"] = np.nan
 
 sts_expanded_df = pd.DataFrame(sts_expanded, index=sts_pivoted.index)
@@ -157,7 +163,7 @@ supplier_n = sts_rows.groupby("transaction_id").size().reset_index(name="supplie
 
 # --- Duration_STS (sum of all STS durations) ---
 duration_cols = [f"duration_STS{k}" for k in range(1, max_sts + 1)]
-sts_expanded_df["duration_STS"] = sts_expanded_df[duration_cols].sum(axis=1)
+sts_expanded_df["duration_STS"] = sts_expanded_df[duration_cols].sum(axis=1).round(6)
 
 # --- End STS final ---
 # Use the final expanded STS slot, not the maximum end time. This keeps
@@ -165,11 +171,12 @@ sts_expanded_df["duration_STS"] = sts_expanded_df[duration_cols].sum(axis=1)
 last_sts = (
     sts_rows.sort_values(["transaction_id", "sts_seq"])
     .groupby("transaction_id", as_index=False)
-    .tail(1)[["transaction_id", "end_dt_round"]]
-    .rename(columns={"end_dt_round": "end_STS_final_dt"})
+    .tail(1)[["transaction_id", "end_dt"]]
+    .rename(columns={"end_dt": "end_STS_final_dt"})
 )
 last_sts["end_STS_final"] = last_sts["end_STS_final_dt"].dt.date
 last_sts["endhour_STS_final"] = last_sts["end_STS_final_dt"].dt.hour
+last_sts["end_STS_final_mins"] = last_sts["end_STS_final_dt"].dt.minute
 
 # ═══════════════════════════════════════════════════════════════════
 # Assemble final dataset
@@ -180,7 +187,8 @@ final = final.merge(port_info, on="transaction_id", how="left")
 final = final.merge(supplier_n, on="transaction_id", how="left")
 final = final.merge(sts_expanded_df, on="transaction_id", how="left")
 final = final.merge(
-    last_sts[["transaction_id", "end_STS_final", "endhour_STS_final"]],
+    last_sts[["transaction_id", "end_STS_final", "endhour_STS_final",
+              "end_STS_final_mins"]],
     on="transaction_id", how="left"
 )
 
@@ -193,10 +201,10 @@ final["supplier_n"] = final["supplier_n"].fillna(0).astype(int)
 # Key: same vessel_code, same start date-hour, same end date-hour, same port
 final["_dup_key"] = (
     final["vessel_code"].fillna("MISSING").astype(str)
-    + "|" + final["startdate"].astype(str)
-    + "|" + final["starthour"].fillna(-1).astype(int).astype(str)
-    + "|" + final["enddate"].astype(str)
-    + "|" + final["endhour"].fillna(-1).astype(int).astype(str)
+    + "|" + final["tx_start_dt_round"].dt.date.astype(str)
+    + "|" + final["tx_start_dt_round"].dt.hour.fillna(-1).astype(int).astype(str)
+    + "|" + final["tx_end_dt_round"].dt.date.astype(str)
+    + "|" + final["tx_end_dt_round"].dt.hour.fillna(-1).astype(int).astype(str)
     + "|" + final["port"].fillna("NOPORT").astype(str)
 )
 
@@ -219,7 +227,8 @@ if n_dup_groups > 0:
 
     dup_log_cols = [
         "transaction_id", "vessel_name", "vessel_code",
-        "startdate", "starthour", "enddate", "endhour", "port",
+        "startdate", "starthour", "start_mins",
+        "enddate", "endhour", "end_mins", "port",
         "supplier_n"
     ] + [c for c in final.columns if c.startswith("supplier") and c != "supplier_n"]
 
@@ -296,7 +305,8 @@ base_cols = [
     "transaction_id",
     "vessel_name", "vessel_code", "vessel_type",
     "in_service_commission", "dwt", "gt", "draught",
-    "startdate", "starthour", "enddate", "endhour", "duration",
+    "startdate", "starthour", "start_mins",
+    "enddate", "endhour", "end_mins", "duration",
     "port", "port_multi_flag", "port_all_matched", "unmatched_port",
 ]
 
@@ -304,26 +314,24 @@ sts_cols = []
 for k in range(1, max_sts + 1):
     sts_cols += [
         f"supplier{k}",
-        f"start_STS{k}", f"starthour_STS{k}",
-        f"end_STS{k}", f"endhour_STS{k}",
+        f"start_STS{k}", f"starthour_STS{k}", f"start_STS{k}_mins",
+        f"end_STS{k}", f"endhour_STS{k}", f"end_STS{k}_mins",
         f"duration_STS{k}",
     ]
 
 summary_cols = [
     "supplier_n", "duration_STS",
-    "end_STS_final", "endhour_STS_final",
+    "end_STS_final", "endhour_STS_final", "end_STS_final_mins",
 ]
 
 output_cols = base_cols + sts_cols + summary_cols
 final = final[output_cols]
 
 # ── Save ───────────────────────────────────────────────────────────
-date_like_cols = [
-    c for c in final.columns
-    if c in {"startdate", "enddate", "end_STS_final"}
-    or c.startswith("start_STS")
-    or (c.startswith("end_STS") and not c.startswith("endhour_STS"))
-]
+date_like_cols = ["startdate", "enddate", "end_STS_final"]
+for k in range(1, max_sts + 1):
+    date_like_cols += [f"start_STS{k}", f"end_STS{k}"]
+date_like_cols = [c for c in date_like_cols if c in final.columns]
 for col in date_like_cols:
     final[col] = pd.to_datetime(final[col], errors="coerce").dt.strftime("%Y-%m-%d")
 

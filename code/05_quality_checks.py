@@ -20,7 +20,9 @@ DATA_FINAL.mkdir(parents=True, exist_ok=True)
 # ── Load all data ──────────────────────────────────────────────────
 preprocessed = pd.read_excel(DATA_INT / "01_bunkering_preprocessed.xlsx")
 tx_base = pd.read_excel(DATA_INT / "02_transaction_level_base.xlsx")
-tx_final = pd.read_stata(DATA_INT / "04_transaction_with_weather.dta")
+with pd.read_stata(DATA_INT / "04_transaction_with_weather.dta", iterator=True) as reader:
+    stata_labels = reader.variable_labels()
+    tx_final = reader.read()
 
 # Stata stores missing strings as empty strings; convert back to NaN
 for col in tx_final.columns:
@@ -70,12 +72,19 @@ print(f"  Transactions lost: {raw_tx_count - final_tx_count}")
 # ═══════════════════════════════════════════════════════════════════
 raw_sts_rows = preprocessed[preprocessed["is_sts"] == 1]
 raw_sts_count = len(raw_sts_rows[raw_sts_rows["is_duplicate"] == 0])
+raw_sts_retained_count = len(
+    raw_sts_rows[
+        (raw_sts_rows["is_duplicate"] == 0)
+        & (raw_sts_rows["transaction_id"].isin(tx_final["transaction_id"]))
+    ]
+)
 final_sts_slots = tx_final["supplier_n"].sum()
 
 print(f"\n--- Check 2: STS Counts ---")
 print(f"  Raw STS rows (non-duplicate): {raw_sts_count}")
+print(f"  Raw STS rows in retained transactions: {raw_sts_retained_count}")
 print(f"  Final STS slots (sum of supplier_n): {int(final_sts_slots)}")
-print(f"  STS count match: {'PASS' if raw_sts_count == final_sts_slots else 'FAIL'}")
+print(f"  STS count match: {'PASS' if raw_sts_retained_count == final_sts_slots else 'FAIL'}")
 
 # ═══════════════════════════════════════════════════════════════════
 # Check 3: supplier_n = STS row count per transaction
@@ -114,19 +123,28 @@ else:
 duration_cols = [c for c in tx_final.columns
                  if c.startswith("duration_STS") and c != "duration_STS"
                  and c != "duration_STS_final"]
-tx_final["duration_STS_check"] = tx_final[duration_cols].sum(axis=1)
-mismatch_dur = abs(tx_final["duration_STS"] - tx_final["duration_STS_check"]) > 0.01
+duration_sts_check = tx_final[duration_cols].sum(axis=1)
+mismatch_dur = abs(tx_final["duration_STS"] - duration_sts_check) > 0.01
 n_mismatch_dur = mismatch_dur.sum()
+duration_sts_values = pd.Series(tx_final[duration_cols].to_numpy().ravel()).dropna()
+duration_sts_lt1 = int(((duration_sts_values > 0) & (duration_sts_values < 1)).sum())
+duration_sts_zero = int((duration_sts_values == 0).sum())
 
 print(f"\n--- Check 4: duration_STS integrity ---")
 print(f"  Mismatches: {n_mismatch_dur}")
 print(f"  duration_STS match: {'PASS' if n_mismatch_dur == 0 else 'FAIL'}")
+print(f"  duration_STSk >0 and <1h: {duration_sts_lt1}")
+print(f"  duration_STSk ==0h: {duration_sts_zero}")
 
 # ═══════════════════════════════════════════════════════════════════
 # Check 5: end_STS_final = last STS end date
 # ═══════════════════════════════════════════════════════════════════
-max_sts = max([int(c.split("_STS")[-1]) for c in tx_final.columns
-               if c.startswith("end_STS") and c != "end_STS_final"] + [0])
+max_sts = max([
+    int(c.replace("end_STS", ""))
+    for c in tx_final.columns
+    if c.startswith("end_STS")
+    and c.replace("end_STS", "").isdigit()
+] + [0])
 
 end_sts_mismatches = []
 for _, row in tx_final[tx_final["supplier_n"] > 0].iterrows():
@@ -135,7 +153,13 @@ for _, row in tx_final[tx_final["supplier_n"] > 0].iterrows():
     actual_date = date_key(row.get("end_STS_final"))
     expected_hour = row.get(f"endhour_STS{k}")
     actual_hour = row.get("endhour_STS_final")
-    if expected_date != actual_date or expected_hour != actual_hour:
+    expected_mins = row.get(f"end_STS{k}_mins")
+    actual_mins = row.get("end_STS_final_mins")
+    if (
+        expected_date != actual_date
+        or expected_hour != actual_hour
+        or expected_mins != actual_mins
+    ):
         end_sts_mismatches.append({
             "transaction_id": row["transaction_id"],
             "supplier_n": k,
@@ -143,6 +167,8 @@ for _, row in tx_final[tx_final["supplier_n"] > 0].iterrows():
             "actual_end_STS_final": actual_date,
             "expected_endhour_STS_final": expected_hour,
             "actual_endhour_STS_final": actual_hour,
+            "expected_end_STS_final_mins": expected_mins,
+            "actual_end_STS_final_mins": actual_mins,
         })
 
 end_sts_mismatch_count = len(end_sts_mismatches)
@@ -290,9 +316,13 @@ for col in date_cols:
     if col in tx_final.columns:
         tx_final[col] = tx_final[col].astype(str)
 
+# Filter labels to only include columns in final DataFrame
+final_labels = {col: stata_labels[col] for col in tx_final.columns if col in stata_labels}
+
 # Save final Stata output
 tx_final.to_stata(DATA_FINAL / "bunkering_transaction_final.dta",
-                  write_index=False, version=118)
+                  write_index=False, version=118,
+                  variable_labels=final_labels)
 
 print(f"\n=== Final Outputs ===")
 print(f"  {DATA_FINAL / 'bunkering_transaction_final.dta'}")
@@ -310,12 +340,15 @@ summary = f"""# Processing Summary — {datetime.now().strftime('%Y-%m-%d %H:%M:
 - Duplicate rows removed: {dup_count}
 - Final transactions: {final_tx_count}
 - Raw STS rows (non-dup): {raw_sts_count}
+- Raw STS rows in retained transactions: {raw_sts_retained_count}
 - Final STS slots: {int(final_sts_slots)}
 
 ## STS Expansion
 - max_STS: {max_sts}
-- supplier_n = STS record count: {'PASS' if mismatch_count == 0 else 'FAIL'}
+- supplier_n = STS record count: {'PASS' if raw_sts_retained_count == final_sts_slots and mismatch_count == 0 else 'FAIL'}
 - duration_STS = sum(duration_STSk): {'PASS' if n_mismatch_dur == 0 else 'FAIL'}
+- duration_STSk >0 and <1h: {duration_sts_lt1}
+- duration_STSk ==0h: {duration_sts_zero}
 - end_STS_final = last STS endpoint: {'PASS' if end_sts_mismatch_count == 0 else 'FAIL'}
 - Same-supplier multi-STS cases: {len(same_sup_ids)}
 
