@@ -188,6 +188,68 @@ final = final.merge(
 final["supplier_n"] = final["supplier_n"].fillna(0).astype(int)
 
 # ═══════════════════════════════════════════════════════════════════
+# Transaction-level duplicate detection
+# ═══════════════════════════════════════════════════════════════════
+# Key: same vessel_code, same start date-hour, same end date-hour, same port
+final["_dup_key"] = (
+    final["vessel_code"].fillna("MISSING").astype(str)
+    + "|" + final["startdate"].astype(str)
+    + "|" + final["starthour"].fillna(-1).astype(int).astype(str)
+    + "|" + final["enddate"].astype(str)
+    + "|" + final["endhour"].fillna(-1).astype(int).astype(str)
+    + "|" + final["port"].fillna("NOPORT").astype(str)
+)
+
+# Within each key group, rank by supplier_n descending (keep richest record)
+final["_dup_rank"] = final.groupby("_dup_key")["supplier_n"].rank(
+    method="first", ascending=False
+)
+dup_mask = final["_dup_key"].duplicated(keep=False)
+n_dup_groups = final.loc[dup_mask, "_dup_key"].nunique()
+
+if n_dup_groups > 0:
+    dup_all = final[dup_mask].copy()
+
+    # Split: both-have-STS vs one-empty-shell
+    dup_all["_group_has_sts"] = dup_all.groupby("_dup_key")["supplier_n"].transform(
+        lambda x: (x > 0).sum()
+    )
+    real_dup = dup_all[dup_all["_group_has_sts"] >= 2]
+    shell_dup = dup_all[dup_all["_group_has_sts"] < 2]
+
+    dup_log_cols = [
+        "transaction_id", "vessel_name", "vessel_code",
+        "startdate", "starthour", "enddate", "endhour", "port",
+        "supplier_n"
+    ] + [c for c in final.columns if c.startswith("supplier") and c != "supplier_n"]
+
+    if len(real_dup) > 0:
+        real_dup[dup_log_cols].sort_values(
+            ["vessel_code", "startdate"]
+        ).to_excel(LOGS / "duplicate_transactions_real.xlsx", index=False)
+
+    if len(shell_dup) > 0:
+        shell_dup[dup_log_cols].sort_values(
+            ["vessel_code", "startdate"]
+        ).to_excel(LOGS / "duplicate_transactions_shell.xlsx", index=False)
+
+    # Remove all duplicates (keep rank=1 = highest supplier_n per group)
+    drop_ids = final.loc[dup_mask & (final["_dup_rank"] > 1), "transaction_id"].tolist()
+
+    print(f"\nTransaction-level duplicate groups: {n_dup_groups}")
+    print(f"  Both-have-STS groups: {real_dup['_dup_key'].nunique() if len(real_dup) > 0 else 0}")
+    print(f"  Empty-shell groups: {shell_dup['_dup_key'].nunique() if len(shell_dup) > 0 else 0}")
+    print(f"  Duplicate rows to remove: {len(drop_ids)}")
+    print(f"  Saved: logs/duplicate_transactions_real.xlsx + _shell.xlsx")
+
+    final = final[~final["transaction_id"].isin(drop_ids)]
+    print(f"  After dedup: {len(final)} transactions")
+else:
+    print(f"\nNo transaction-level duplicates found.")
+
+final = final.drop(columns=["_dup_key", "_dup_rank"])
+
+# ═══════════════════════════════════════════════════════════════════
 # Logs
 # ═══════════════════════════════════════════════════════════════════
 
